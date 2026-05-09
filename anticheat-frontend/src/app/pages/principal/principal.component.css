@@ -1,0 +1,112 @@
+/* ── Upload card ─────────────────────────────────────────────── */
+.upload-card {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: 48px 32px;
+  max-width: 560px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.upload-title {
+  font-size: 24px;
+  font-weight: 700;
+  margin: 0 0 4px;
+}
+
+.upload-subtitle {
+  font-size: 14px;
+  color: var(--color-text-secondary);
+  margin: 0 0 28px;
+}
+
+.file-drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 32px 24px;
+  border: 2px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.file-drop:hover {
+  border-color: var(--color-primary);
+  background: rgba(13, 148, 136, 0.04);
+}
+
+.file-drop-text {
+  font-size: 15px;
+  color: var(--color-text-secondary);
+}
+
+/* ── Result section ─────────────────────────────────────────── */
+.result-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 32px;
+}
+
+.result-badge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 28px;
+  border-radius: var(--radius-full);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.result-badge.legal {
+  background: #DCFCE7;
+  color: #166534;
+}
+
+.result-badge.cheat {
+  background: #FEE2E2;
+  color: #991B1B;
+}
+
+.result-icon {
+  font-size: 22px;
+}
+
+/* ── Chart ──────────────────────────────────────────────────── */
+.chart-card {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: 24px;
+  margin-top: 24px;
+  width: 100%;
+  max-width: 800px;
+}
+
+.chart-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 16px;
+  text-align: center;
+}
+
+.chart-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+canvas {
+  width: 100% !important;
+  height: 400px !important;
+  display: block;
+}
+
+/* ── Responsive ─────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .upload-card { padding: 32px 20px; }
+  canvas { height: 280px !important; }
+}

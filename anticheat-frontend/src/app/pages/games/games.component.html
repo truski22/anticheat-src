@@ -1,0 +1,30 @@
+<app-navbar activePage="games"></app-navbar>
+
+<div class="page-content">
+  <div class="container" *ngIf="dataLoaded; else loading">
+    <h2 class="section-title">Historial de partidas</h2>
+
+    <div class="games-empty" *ngIf="games_list.length === 0">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-secondary)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="2" y="3" width="20" height="18" rx="2"/>
+        <path d="M8 7h8M8 11h5"/>
+      </svg>
+      <p>No tienes partidas analizadas todavía</p>
+    </div>
+
+    <div class="games-list" *ngIf="games_list.length > 0">
+      <div class="game-card" *ngFor="let game of games_list">
+        <div class="game-badge" [class.legal]="game.legal" [class.cheat]="!game.legal">
+          {{ game.legal ? '✓ Legal' : '✗ Trampa' }}
+        </div>
+        <p class="game-moves">{{ game.moves }}</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<ng-template #loading>
+  <div class="spinner-center">
+    <div class="spinner"></div>
+  </div>
+</ng-template>

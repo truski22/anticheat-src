@@ -1,0 +1,109 @@
+/* ── Profile layout ──────────────────────────────────────────── */
+.profile-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 32px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+/* ── Profile card ───────────────────────────────────────────── */
+.profile-card {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: 40px 32px;
+}
+
+.profile-avatar {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 28px;
+}
+
+.profile-avatar svg {
+  background: rgba(13,148,136,.08);
+  padding: 16px;
+  border-radius: 50%;
+  width: 72px;
+  height: 72px;
+}
+
+.info-row {
+  margin-bottom: 20px;
+}
+
+.info-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-secondary);
+  margin-bottom: 6px;
+}
+
+.info-value {
+  display: block;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--color-text);
+  background: var(--color-surface-alt);
+  padding: 12px 16px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+}
+
+.profile-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 28px;
+}
+
+/* ── Stats panel ────────────────────────────────────────────── */
+.stats-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.stat-card {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: 28px 24px;
+  text-align: center;
+}
+
+.stat-number {
+  display: block;
+  font-size: 48px;
+  font-weight: 700;
+  line-height: 1;
+  margin-bottom: 6px;
+}
+
+.stat-label {
+  display: block;
+  font-size: 14px;
+  color: var(--color-text-secondary);
+}
+
+.stat-total .stat-number { color: var(--color-primary); }
+.stat-legal .stat-number { color: var(--color-success); }
+.stat-cheat .stat-number { color: var(--color-danger); }
+
+.stat-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+/* ── Responsive ─────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .profile-layout {
+    grid-template-columns: 1fr;
+  }
+  .stat-number { font-size: 36px; }
+}

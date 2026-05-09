@@ -1,0 +1,49 @@
+<app-navbar activePage="home"></app-navbar>
+
+<div class="page-content">
+  <div class="container">
+    <div class="upload-card">
+      <h2 class="upload-title">Analizar partida</h2>
+      <p class="upload-subtitle">Sube un archivo PGN para detectar trampas</p>
+
+      <label for="partida" class="file-drop">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+          <line x1="12" y1="18" x2="12" y2="12"/>
+          <line x1="9" y1="15" x2="12" y2="12"/>
+          <line x1="15" y1="15" x2="12" y2="12"/>
+        </svg>
+        <span class="file-drop-text">{{ fileName || 'Seleccionar archivo .pgn' }}</span>
+      </label>
+      <input type="file" id="partida" name="partidaPGN" accept="text/pgn" (change)="mostrarNombre($event)" hidden>
+
+      <button class="btn btn-primary btn-block" [disabled]="!fileValid || analizando" (click)="analyse()" style="margin-top: 20px;">
+        <span *ngIf="!analizando">Analizar</span>
+        <div *ngIf="analizando" class="spinner spinner-sm spinner-white"></div>
+      </button>
+    </div>
+
+    <div class="result-section" *ngIf="analysisData">
+      <div class="result-badge" [class.legal]="analysisData.legal" [class.cheat]="!analysisData.legal">
+        <span class="result-icon">{{ analysisData.legal ? '✓' : '✗' }}</span>
+        <span class="result-label">{{ analysisData.legal ? 'LEGAL' : 'TRAMPA' }}</span>
+      </div>
+
+      <div class="chart-card" *ngIf="analysisComplete">
+        <h3 class="chart-title">Precisión por jugada</h3>
+        <div class="chart-wrapper">
+          <canvas #analysisChart></canvas>
+        </div>
+      </div>
+
+      <button class="btn btn-success" *ngIf="analysisComplete" (click)="saveGame()" style="margin-top: 16px;">
+        Guardar partida
+      </button>
+    </div>
+
+    <div *ngIf="saveGameResponse" class="toast-success">
+      ✓ Partida guardada correctamente
+    </div>
+  </div>
+</div>

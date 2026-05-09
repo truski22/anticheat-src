@@ -1,0 +1,21 @@
+<nav class="navbar">
+  <div class="nav-inner">
+    <a class="nav-brand" (click)="home()">Anti-Cheat</a>
+
+    <button class="nav-toggle" (click)="toggleMenu()" [attr.aria-expanded]="menuOpen">
+      <span class="hamburger" [class.open]="menuOpen"></span>
+    </button>
+
+    <div class="nav-links" [class.show]="menuOpen">
+      <a class="nav-link" [class.active]="activePage === 'home'"  (click)="home()">Análisis</a>
+      <a class="nav-link" [class.active]="activePage === 'games'" (click)="games()">Partidas</a>
+      <a class="nav-link nav-avatar" [class.active]="activePage === 'profile'" (click)="profile()">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+          <circle cx="12" cy="7" r="4"/>
+        </svg>
+        <span>Perfil</span>
+      </a>
+    </div>
+  </div>
+</nav>

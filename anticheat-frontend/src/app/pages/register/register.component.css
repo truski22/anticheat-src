@@ -1,0 +1,14 @@
+.auth-page {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.login-link {
+  text-align: center;
+  font-size: 14px;
+  color: var(--color-text-secondary);
+  margin: 0;
+}

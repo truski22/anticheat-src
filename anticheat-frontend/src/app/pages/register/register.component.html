@@ -1,0 +1,37 @@
+<div class="auth-page">
+  <div class="card">
+    <h1 class="card-title">Crear cuenta</h1>
+    <p class="card-subtitle">Regístrate para empezar a analizar partidas</p>
+
+    <div class="floating-field">
+      <input type="text" id="reg-user" placeholder=" " [(ngModel)]="user" name="user">
+      <label for="reg-user">Nombre de usuario</label>
+    </div>
+
+    <div class="floating-field">
+      <input type="email" id="reg-email" placeholder=" " [(ngModel)]="email" name="correo">
+      <label for="reg-email">Correo electrónico</label>
+    </div>
+
+    <div class="floating-field">
+      <input type="password" id="reg-psw" placeholder=" " [(ngModel)]="password" name="psw">
+      <label for="reg-psw">Contraseña</label>
+    </div>
+
+    <div class="floating-field">
+      <input type="password" id="reg-psw-conf" placeholder=" " [(ngModel)]="passwordConf" name="confirm_psw">
+      <label for="reg-psw-conf">Repetir contraseña</label>
+    </div>
+
+    <button class="btn btn-primary btn-block" (click)="register()"
+            [disabled]="!user || !email || !password || !passwordConf || loading">
+      <span *ngIf="!loading">Registrarse</span>
+      <div *ngIf="loading" class="spinner spinner-sm spinner-white"></div>
+    </button>
+
+    <div *ngIf="errorMessage" class="error-msg">{{ errorMessage }}</div>
+
+    <div class="divider"></div>
+    <p class="login-link">¿Ya tienes cuenta? <a class="btn-ghost" href="/">Inicia sesión</a></p>
+  </div>
+</div>

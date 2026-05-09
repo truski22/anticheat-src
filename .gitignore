@@ -1,0 +1,55 @@
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+*.iml
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+.history/*
+
+# Build artifacts
+**/target/
+**/*.class
+/dist
+/tmp
+/out-tsc
+/bazel-out
+
+# Docker volumes
+postgres_data/
+
+# Node
+**/node_modules/
+npm-debug.log
+yarn-error.log
+**/.angular/
+**/dist/
+**/coverage/
+
+# Angular
+/.angular/cache
+.sass-cache/
+/connect.lock
+/coverage
+/libpeerconnection.log
+testem.log
+/typings
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Git hooks (local only)
+.githooks/
