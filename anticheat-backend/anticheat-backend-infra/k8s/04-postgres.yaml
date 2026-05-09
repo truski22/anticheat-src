@@ -1,0 +1,125 @@
+# ──────────────────────────────────────────────
+# POSTGRESQL — base de datos (servicio con estado)
+# ──────────────────────────────────────────────
+
+# PersistentVolumeClaim (PVC): solicita almacenamiento persistente al clúster.
+# Kubernetes busca un PersistentVolume (PV) disponible que satisfaga la
+# solicitud. El volumen sobrevive al reinicio/borrado del pod: los datos no
+# se pierden aunque PostgreSQL se reinicie.
+#
+# En Minikube el PV se crea automáticamente (StorageClass "standard").
+# En producción usarías un StorageClass de tu cloud provider (EBS, GCP PD…).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  namespace: anticheat
+spec:
+  accessModes:
+    - ReadWriteOnce     # puede ser montado por un solo nodo a la vez (típico de BBDDs)
+  resources:
+    requests:
+      storage: 1Gi
+
+---
+# StatefulSet: como un Deployment pero para servicios con estado.
+# Garantiza:
+#   - Identidad de red estable: el pod siempre se llama "postgres-0"
+#   - Orden de arranque/parada: arrancan en orden 0,1,2... y paran al revés
+#   - Persistencia asociada: el PVC se mantiene aunque el pod se elimine
+# Es el recurso correcto para bases de datos.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: anticheat
+spec:
+  serviceName: "postgres"    # nombre del Service headless que gobierna el StatefulSet
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: anticheat-secret
+                  key: DB_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: anticheat-secret
+                  key: DB_PASSWORD
+            - name: POSTGRES_DB
+              value: "anticheat"
+
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - "pg_isready -U postgres"
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 10
+
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - "pg_isready -U postgres"
+            initialDelaySeconds: 30
+            periodSeconds: 20
+
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data    # datos persistentes de PostgreSQL
+            - name: postgres-init
+              mountPath: /docker-entrypoint-initdb.d  # scripts ejecutados en primer arranque
+
+      volumes:
+        - name: postgres-data
+          persistentVolumeClaim:
+            claimName: postgres-pvc
+        - name: postgres-init
+          configMap:
+            name: postgres-init-config
+
+---
+# Service Headless (clusterIP: None): no tiene IP virtual propia.
+# El DNS devuelve directamente la IP del pod (postgres-0.postgres.anticheat…).
+# Es obligatorio para StatefulSets: permite que cada pod tenga
+# un nombre DNS estable e individual.
+# Las aplicaciones usan "postgres" como hostname y resuelven al pod correcto.
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: anticheat
+spec:
+  clusterIP: None       # headless
+  selector:
+    app: postgres
+  ports:
+    - port: 5432
+      targetPort: 5432

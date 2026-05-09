@@ -1,0 +1,85 @@
+# ──────────────────────────────────────────────
+# MOSQUITTO — broker MQTT interno
+# ──────────────────────────────────────────────
+
+# Deployment: describe los pods sin estado (stateless).
+# Kubernetes se encarga de mantener el número de réplicas deseado
+# y de reiniciar el pod si falla.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mosquitto
+  namespace: anticheat
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mosquitto        # Kubernetes usa estas etiquetas para saber qué pods gestiona este Deployment
+  template:
+    metadata:
+      labels:
+        app: mosquitto
+    spec:
+      containers:
+        - name: mosquitto
+          image: eclipse-mosquitto:2
+          ports:
+            - containerPort: 1883
+
+          # readinessProbe: Kubernetes no envía tráfico al pod hasta que
+          # este probe tenga éxito. Evita que otros servicios conecten
+          # antes de que el broker esté listo.
+          readinessProbe:
+            tcpSocket:
+              port: 1883
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+          # livenessProbe: si falla, Kubernetes reinicia el contenedor.
+          livenessProbe:
+            tcpSocket:
+              port: 1883
+            initialDelaySeconds: 15
+            periodSeconds: 20
+
+          # resources: declara cuánta CPU y memoria necesita el contenedor.
+          # requests = mínimo garantizado para el scheduling.
+          # limits = máximo que puede consumir antes de ser throttled (CPU)
+          #          o eliminado (OOMKilled, memoria).
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "32Mi"
+            limits:
+              cpu: "100m"
+              memory: "64Mi"
+
+          # volumeMounts: puntos de montaje dentro del contenedor
+          volumeMounts:
+            - name: mosquitto-config
+              mountPath: /mosquitto/config/mosquitto.conf
+              subPath: mosquitto.conf   # monta solo ese fichero, no el directorio entero
+
+      # volumes: declara los volúmenes disponibles para el pod.
+      # Aquí usamos un ConfigMap como fuente de un fichero de configuración.
+      volumes:
+        - name: mosquitto-config
+          configMap:
+            name: mosquitto-config
+
+---
+# Service: expone los pods internamente dentro del clúster.
+# ClusterIP (por defecto) asigna una IP virtual estable.
+# Cualquier pod puede conectarse a "mosquitto:1883" y Kubernetes
+# enruta la petición al pod correcto mediante kube-proxy.
+apiVersion: v1
+kind: Service
+metadata:
+  name: mosquitto
+  namespace: anticheat
+spec:
+  selector:
+    app: mosquitto        # selecciona los pods con este label
+  ports:
+    - port: 1883          # puerto del Service (lo que usan los clientes)
+      targetPort: 1883    # puerto del contenedor al que redirige

@@ -1,0 +1,54 @@
+# ConfigMap: almacena configuración no sensible accesible por los pods como
+# variables de entorno o ficheros montados en volúmenes.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: anticheat
+data:
+  DB_HOST: "postgres"
+  # URL del servicio Python que consume analysis-service
+  CHESS_INSIGHTS_URL: "http://ml-service:5002/eval"
+  # Ruta del binario de Stockfish dentro del contenedor ml-service
+  STOCKFISH_PATH: "/usr/games/stockfish"
+  # MQTT broker URL used by all Java services (env var interpolation in mqtt.properties)
+  MQTT_BROKER_URL: "tcp://mosquitto:1883"
+
+---
+# Configuración de Mosquitto montada como fichero dentro del contenedor
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mosquitto-config
+  namespace: anticheat
+data:
+  mosquitto.conf: |
+    listener 1883
+    allow_anonymous true
+
+---
+# Script SQL ejecutado por PostgreSQL al primer arranque para crear
+# las tablas necesarias en la base de datos anticheat
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init-config
+  namespace: anticheat
+data:
+  init.sql: |
+    -- PostgreSQL init script
+    CREATE TABLE IF NOT EXISTS users (
+        name          VARCHAR(255) PRIMARY KEY,
+        email         VARCHAR(255) UNIQUE NOT NULL,
+        password      VARCHAR(255) NOT NULL,
+        total_games   INT DEFAULT 0,
+        cheated_games INT DEFAULT 0,
+        fair_games    INT DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS games (
+        id       SERIAL PRIMARY KEY,
+        username VARCHAR(255) NOT NULL,
+        moves    TEXT         NOT NULL,
+        legal    BOOLEAN      NOT NULL
+    );

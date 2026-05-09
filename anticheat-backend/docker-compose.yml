@@ -1,0 +1,129 @@
+services:
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    ports:
+      - "1883:1883"
+    environment:
+      MQTT_USER: ${MQTT_USER:-chessfraud}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:-change-me-in-production}
+    volumes:
+      - ./anticheat-backend-infra/mqtt/docker-entrypoint.sh:/docker-entrypoint.sh
+    entrypoint: ["/bin/sh", "/docker-entrypoint.sh"]
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_pub -h localhost -p 1883 -t healthcheck -m ping -q 0 -u ${MQTT_USER:-chessfraud} -P ${MQTT_PASSWORD:-change-me-in-production}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: anticheat
+    volumes:
+      - ./anticheat-backend-infra/docker/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  ml-service:
+    build:
+      context: ./anticheat-backend-ml-service
+    environment:
+      AUTH_TOKEN: ${ML_SERVICE_TOKEN:-change-me-in-production}
+      STOCKFISH_PATH: /usr/games/stockfish
+      STOCKFISH_WORKERS: ${STOCKFISH_WORKERS:-10}
+    ports:
+      - "5002:5002"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:5002/health')\" || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  gateway:
+    build:
+      context: .
+      dockerfile: anticheat-backend-gateway/Dockerfile
+    ports:
+      - "8080:8080"
+      - "8081:8081"
+    environment:
+      JWT_SECRET: ${JWT_SECRET}
+      AUTH_PORT: "8081"
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:4200}
+      MQTT_BROKER_URL: ${MQTT_BROKER_URL:-tcp://mosquitto:1883}
+      MQTT_USER: ${MQTT_USER:-chessfraud}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:-change-me-in-production}
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+    restart: on-failure
+
+  user-service:
+    build:
+      context: .
+      dockerfile: anticheat-backend-user-service/Dockerfile
+    environment:
+      DB_HOST: postgres
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      MQTT_BROKER_URL: ${MQTT_BROKER_URL:-tcp://mosquitto:1883}
+      MQTT_USER: ${MQTT_USER:-chessfraud}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:-change-me-in-production}
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    restart: on-failure
+
+  game-service:
+    build:
+      context: .
+      dockerfile: anticheat-backend-game-service/Dockerfile
+    environment:
+      DB_HOST: postgres
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD}
+      MQTT_BROKER_URL: ${MQTT_BROKER_URL:-tcp://mosquitto:1883}
+      MQTT_USER: ${MQTT_USER:-chessfraud}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:-change-me-in-production}
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    restart: on-failure
+
+  analysis-service:
+    build:
+      context: .
+      dockerfile: anticheat-backend-analysis-service/Dockerfile
+    environment:
+      CHESS_INSIGHTS_URL: http://ml-service:5002/eval
+      ML_SERVICE_TOKEN: ${ML_SERVICE_TOKEN}
+      MQTT_BROKER_URL: ${MQTT_BROKER_URL:-tcp://mosquitto:1883}
+      MQTT_USER: ${MQTT_USER:-chessfraud}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:-change-me-in-production}
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+      ml-service:
+        condition: service_healthy
+    restart: on-failure
+
+volumes:
+  postgres_data:

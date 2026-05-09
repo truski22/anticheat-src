@@ -1,0 +1,118 @@
+# ──────────────────────────────────────────────
+# GATEWAY — gateway WebSocket expuesto al exterior
+# ──────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway
+  namespace: anticheat
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gateway
+  template:
+    metadata:
+      labels:
+        app: gateway
+    spec:
+      # initContainers: contenedores que se ejecutan y COMPLETAN antes de que
+      # arranque el contenedor principal. Son la forma de gestionar dependencias
+      # de arranque en Kubernetes (equivalente a depends_on en Docker Compose).
+      # Si un initContainer falla, Kubernetes lo reintenta hasta que tenga éxito.
+      initContainers:
+        - name: wait-for-mosquitto
+          image: busybox:1.36
+          # nc -z: intenta conectar al host:puerto sin enviar datos.
+          # El bucle espera hasta que el broker MQTT acepte conexiones.
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z mosquitto 1883; do
+                echo "Esperando a mosquitto..."; sleep 2
+              done
+              echo "Mosquitto listo."
+
+      containers:
+        - name: gateway
+          image: anticheat/gateway:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+            - containerPort: 8081
+              name: health
+
+          env:
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: anticheat-secret
+                  key: JWT_SECRET
+            - name: ALLOWED_ORIGINS
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: ALLOWED_ORIGINS
+                  optional: true
+            - name: MQTT_BROKER_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: MQTT_BROKER_URL
+            - name: MQTT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: anticheat-secret
+                  key: MQTT_USER
+            - name: MQTT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: anticheat-secret
+                  key: MQTT_PASSWORD
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8081
+            initialDelaySeconds: 15
+            periodSeconds: 10
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8081
+            initialDelaySeconds: 30
+            periodSeconds: 20
+
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+
+---
+# Service tipo NodePort: expone el pod en un puerto del NODO (máquina física
+# o VM de Kubernetes). Permite acceso desde fuera del clúster.
+# Rango válido de NodePort: 30000–32767.
+#
+# Flujo de una conexión entrante:
+#   Cliente → IP-del-nodo:30080 → Service → Pod:8080
+#
+# En producción usarías LoadBalancer (provisionado por el cloud provider)
+# o un Ingress Controller para TLS y routing por dominio.
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway
+  namespace: anticheat
+spec:
+  type: NodePort
+  selector:
+    app: gateway
+  ports:
+    - port: 8080          # puerto dentro del clúster
+      targetPort: 8080    # puerto del contenedor
+      nodePort: 30080     # puerto accesible desde fuera del clúster
