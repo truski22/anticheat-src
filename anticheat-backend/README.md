@@ -1,6 +1,6 @@
 #  Chess Fraud Detection System
 
-> Real-time chess cheating detection using microservices, MQTT event streaming, and machine learning.
+> Real-time chess cheating detection using microservices, gRPC inter-service communication, and machine learning.
 
 [![Java](https://img.shields.io/badge/Java-21-orange?logo=openjdk)](https://openjdk.org/)
 [![Python](https://img.shields.io/badge/Python-3.11-blue?logo=python)](https://python.org/)
@@ -44,17 +44,13 @@ graph LR
         RL[Rate Limiter]
     end
 
-    subgraph Message Broker
-        MQTT[Eclipse Mosquitto<br/>MQTT Broker]
-    end
-
     subgraph Services
-        GS[Game Service<br/>CRUD & Persistence]
-        US[User Service<br/>Auth & Profiles]
-        AS[Analysis Service<br/>ML Orchestrator]
+        GS[Game Service<br/>gRPC :9091]
+        US[User Service<br/>gRPC :9090]
+        AS[Analysis Service<br/>gRPC :9092]
     end
 
-    subgraph ML
+    subgraph MLLayer[ML]
         ML[ML Service<br/>FastAPI + Stockfish]
     end
 
@@ -67,16 +63,14 @@ graph LR
     REST --> JWT
     WS --> JWT
     WS --> RL
-    WS -->|Typed JSON| MQTT
-    MQTT --> GS
-    MQTT --> US
-    MQTT --> AS
+    WS -->|gRPC| GS
+    WS -->|gRPC| US
+    WS -->|gRPC| AS
     AS -->|HTTP /eval| ML
     GS --> PG
     US --> PG
 
     style FE fill:#e1f5fe
-    style MQTT fill:#fff3e0
     style PG fill:#e8f5e9
     style ML fill:#fce4ec
 ```
@@ -84,8 +78,8 @@ graph LR
 ### Data Flow
 
 1. **Client** connects via WebSocket with JWT token → Gateway validates and rate-limits
-2. **Gateway** deserializes typed `ChessMessage` envelope → routes to MQTT topic by message type
-3. **Game/User Service** processes request → persists to PostgreSQL → publishes response
+2. **Gateway** deserializes typed `ChessMessage` envelope → calls the appropriate backend service via gRPC
+3. **Game/User Service** processes request → persists to PostgreSQL → returns gRPC response
 4. **Analysis Service** receives game → calls ML Service HTTP API → returns fraud classification
 5. **ML Service** runs Stockfish evaluation → extracts 23 features → predicts with trained model
 
@@ -105,8 +99,10 @@ That's it. All services start via Docker Compose.
 |---------|------|-----|
 | Gateway (WebSocket) | 8080 | `ws://localhost:8080/ws?token=JWT` |
 | Gateway (REST Auth) | 8081 | `http://localhost:8081/auth/login` |
+| User Service (gRPC) | 9090 | — |
+| Game Service (gRPC) | 9092 | — |
+| Analysis Service (gRPC) | 9094 | — |
 | ML Service Docs | 5002 | `http://localhost:5002/docs` |
-| MQTT Broker | 1883 | `mqtt://localhost:1883` |
 | PostgreSQL | 5432 | `postgresql://localhost:5432/anticheat` |
 
 ### Make Targets
@@ -124,21 +120,21 @@ make clean   # Remove containers and volumes
 ## Project Structure
 
 ```
-chessFraud/
-├── gateway/              # WebSocket-MQTT bridge, JWT auth, rate limiting
-├── game-service/         # Game CRUD and persistence
-├── analysis-service/     # ML orchestration (calls ml-service)
-├── user-service/         # User auth and profile management
-├── ml-service/           # FastAPI + Stockfish + sklearn model
-├── mqtt-lib/             # Shared MQTT abstraction library
-├── ws-lib/               # WebSocket client library (Tyrus)
-├── shared/               # DTOs, protocol definitions, DB utility
-├── infra/
+anticheat-backend/
+├── anticheat-backend-gateway/          # WebSocket entry point, JWT auth, rate limiting, gRPC client
+├── anticheat-backend-game-service/     # Game CRUD and persistence (gRPC server)
+├── anticheat-backend-analysis-service/ # ML orchestration (gRPC server, calls ml-service)
+├── anticheat-backend-user-service/     # User auth and profile management (gRPC server)
+├── anticheat-backend-ml-service/       # FastAPI + Stockfish + sklearn model
+├── anticheat-backend-libs/
+│   ├── grpc-api/         # Protobuf definitions (.proto) and generated stubs
+│   ├── ws-lib/           # WebSocket server library (Tyrus)
+│   └── protocol/         # DTOs, protocol definitions, DB utility
+├── anticheat-backend-infra/
 │   ├── docker/           # Database init scripts
-│   ├── k8s/              # Kubernetes manifests
-│   └── mqtt/             # Mosquitto broker config
+│   └── k8s/              # Kubernetes manifests
 ├── docs/
-│   ├── protocol.md       # Full WebSocket/MQTT protocol reference
+│   ├── protocol.md       # Full WebSocket protocol reference
 │   └── protocol.ts       # TypeScript interfaces for frontend
 ├── docker-compose.yml
 ├── Makefile
@@ -155,9 +151,17 @@ Each service has its own `README.md` with inputs, outputs, and standalone run in
 
 This project demonstrates **core Java engineering** — no framework magic. Every WebSocket server, HTTP endpoint, MQTT client, and connection pool is built from explicit code. The result is a lightweight system where every line is intentional and traceable, which matters for a portfolio project.
 
-### Why MQTT over Kafka?
+### Why gRPC over Kafka/MQTT?
 
-MQTT is purpose-built for **lightweight, real-time messaging** — exactly what a chess system needs. Sub-millisecond latency on small payloads, minimal resource footprint (Mosquitto runs in ~5MB RAM), and native support for topic-based routing. Kafka's strengths (durable log, high throughput, replay) are overkill for a system processing one game at a time.
+gRPC is the right fit for **synchronous request-response** between microservices in this system:
+
+- **Strongly typed contracts** — `.proto` files define the API. The compiler catches breaking changes at build time, not at runtime with a malformed JSON payload
+- **Direct RPC semantics** — the gateway calls `UserService.Login()` like a local method. No topic routing, no message correlation IDs, no response listeners. The code reads like what it does
+- **HTTP/2 multiplexing** — multiple concurrent RPCs over a single TCP connection. Lower latency and fewer resources than one-connection-per-request or broker-mediated messaging
+- **No broker dependency** — removing the message broker (Mosquitto/Kafka) eliminates an infrastructure component to deploy, monitor, and debug. Fewer moving parts = fewer failure modes
+- **Code generation** — Java and Python stubs are auto-generated from `.proto` files. Adding a new RPC is: define it in proto → regenerate → implement the method
+
+Kafka/MQTT make sense when you need **durable event logs**, **fan-out to multiple consumers**, or **fire-and-forget** semantics. This system doesn't — every request needs exactly one response, immediately. gRPC models that directly.
 
 ### Why FastAPI over Flask?
 
@@ -181,9 +185,9 @@ The system extracts **23 statistical features** from Stockfish evaluations (mean
 | Layer | Technology | Purpose |
 |-------|-----------|---------|
 | Gateway | Java 21, Tomcat WebSocket, JDK HttpServer | WebSocket/REST entry point |
-| Services | Java 21, Maven | Business logic |
+| Services | Java 21, Maven, gRPC | Business logic |
 | ML | Python 3.11, FastAPI, scikit-learn, Stockfish | Fraud classification |
-| Messaging | Eclipse Mosquitto (MQTT 3.1.1) | Inter-service communication |
+| Communication | gRPC (Protocol Buffers) | Inter-service RPC |
 | Database | PostgreSQL 16 | Persistence |
 | Protocol | Jackson, Pydantic | Typed JSON serialization |
 | Auth | JWT (HMAC-SHA256) | Stateless authentication |
