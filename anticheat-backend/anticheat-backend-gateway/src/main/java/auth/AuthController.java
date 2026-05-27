@@ -1,13 +1,22 @@
 package auth;
 
+import com.chessfraud.grpc.user.ChangePasswordByEmailRequest;
+import com.chessfraud.grpc.user.ChangePasswordByEmailResponse;
+import com.chessfraud.grpc.user.LoginRequest;
+import com.chessfraud.grpc.user.LoginResponse;
+import com.chessfraud.grpc.user.RegisterRequest;
+import com.chessfraud.grpc.user.RegisterResponse;
+import com.chessfraud.grpc.user.SendPasswordResetEmailRequest;
+import com.chessfraud.grpc.user.SendPasswordResetEmailResponse;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
-import mqtt.*;
-import protocol.payload.ResponsePayload;
+import grpc.ServiceClients;
+import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -16,28 +25,25 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
 public class AuthController {
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(AuthController.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
-    private static final int AUTH_TIMEOUT_SECONDS = 10;
     private static final int MAX_BODY_SIZE = 4096;
-    private static final long RESET_CODE_TTL_SECONDS = 600; // 10 minutes
+    private static final long RESET_CODE_TTL_SECONDS = 600;
     private static final int MIN_PASSWORD_LENGTH = 8;
     private static final Pattern EMAIL_PATTERN = Pattern.compile(
         "^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$");
 
-    private final MqttInterface mqttInterface;
+    private final ServiceClients clients;
     private final JwtService jwtService;
     private final HttpServer httpServer;
-
-    // Pending auth requests: correlationKey -> future
-    private final Map<String, CompletableFuture<ResponsePayload>> pendingRequests = new ConcurrentHashMap<>();
-
-    // Password reset codes: email -> ResetCode (code + expiry)
+    private final ScheduledExecutorService cleaner;
     private final Map<String, ResetCode> pendingResetCodes = new ConcurrentHashMap<>();
 
     private record ResetCode(String code, Instant expiresAt) {
@@ -46,13 +52,13 @@ public class AuthController {
         }
     }
 
-    public AuthController(MqttInterface mqttInterface, JwtService jwtService) throws IOException {
-        this.mqttInterface = mqttInterface;
+    public AuthController(ServiceClients clients, JwtService jwtService) throws IOException {
+        this.clients = clients;
         this.jwtService = jwtService;
 
         int port = Integer.parseInt(System.getenv().getOrDefault("AUTH_PORT", "8081"));
         this.httpServer = HttpServer.create(new InetSocketAddress("0.0.0.0", port), 0);
-        httpServer.setExecutor(Executors.newFixedThreadPool(4));
+        this.httpServer.setExecutor(Executors.newFixedThreadPool(4));
 
         httpServer.createContext("/auth/login", new LoginHandler());
         httpServer.createContext("/auth/register", new RegisterHandler());
@@ -60,13 +66,12 @@ public class AuthController {
         httpServer.createContext("/auth/reset-password", new ResetPasswordHandler());
         httpServer.createContext("/health", exchange -> sendJson(exchange, 200, "{\"status\":\"ok\"}"));
 
-        // Periodically clean expired reset codes
-        ScheduledExecutorService cleaner = Executors.newSingleThreadScheduledExecutor(r -> {
-            Thread t = new Thread(r, "reset-code-cleaner");
-            t.setDaemon(true);
-            return t;
+        this.cleaner = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread thread = new Thread(r, "reset-code-cleaner");
+            thread.setDaemon(true);
+            return thread;
         });
-        cleaner.scheduleAtFixedRate(this::cleanExpiredCodes, 5, 5, TimeUnit.MINUTES);
+        this.cleaner.scheduleAtFixedRate(this::cleanExpiredCodes, 5, 5, TimeUnit.MINUTES);
     }
 
     public void start() {
@@ -75,82 +80,54 @@ public class AuthController {
     }
 
     public void stop() {
+        cleaner.shutdownNow();
         httpServer.stop(1);
     }
 
-    /**
-     * Called by Logic when an MQTT auth response arrives. Completes the pending future.
-     */
-    public void completeAuthRequest(String correlationKey, ResponsePayload response) {
-        CompletableFuture<ResponsePayload> future = pendingRequests.remove(correlationKey);
-        if (future != null) {
-            future.complete(response);
+    private void storeResetCode(String email, String code) {
+        if (email == null || email.isBlank() || code == null || code.isBlank()) {
+            return;
         }
-    }
 
-    /**
-     * Called by ChangePasswordEmailResponseHandler when the user-service sends back the reset code.
-     * Stores the code with TTL for later verification.
-     */
-    public void storeResetCode(String email, String code) {
-        if (email != null && code != null) {
-            Instant expiry = Instant.now().plusSeconds(RESET_CODE_TTL_SECONDS);
-            pendingResetCodes.put(email.toLowerCase(), new ResetCode(code, expiry));
-            log.info("[AUTH] Reset code stored for email '{}', expires at {}", email, expiry);
-        }
+        Instant expiry = Instant.now().plusSeconds(RESET_CODE_TTL_SECONDS);
+        pendingResetCodes.put(email.toLowerCase(), new ResetCode(code, expiry));
+        log.info("[AUTH] Reset code stored for email '{}', expires at {}", email, expiry);
     }
 
     private void cleanExpiredCodes() {
-        pendingResetCodes.entrySet().removeIf(e -> Instant.now().isAfter(e.getValue().expiresAt()));
+        pendingResetCodes.entrySet().removeIf(entry -> Instant.now().isAfter(entry.getValue().expiresAt()));
     }
-
-    private CompletableFuture<ResponsePayload> submitRequest(String correlationKey, Common mqttMessage) {
-        CompletableFuture<ResponsePayload> future = new CompletableFuture<>();
-        pendingRequests.put(correlationKey, future);
-        mqttInterface.publishMessage(mqttMessage);
-        // Auto-cleanup on timeout
-        future.orTimeout(AUTH_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-              .whenComplete((r, ex) -> pendingRequests.remove(correlationKey));
-        return future;
-    }
-
-    // ── Handlers ──────────────────────────────────────────────────────────
 
     private class LoginHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             addCorsHeaders(exchange);
-            if (handlePreflight(exchange)) return;
-            if (!requirePost(exchange)) return;
+            if (handlePreflight(exchange) || !requirePost(exchange)) {
+                return;
+            }
 
             try {
                 JsonNode body = readBody(exchange);
                 String user = requireField(body, "user");
                 String password = requireField(body, "password");
 
-                String correlationKey = "login:" + UUID.randomUUID();
-                LoginRequest req = new LoginRequest();
-                req.setUser(user);
-                req.setPassword(password);
-                req.setMessageType("LoginRequest");
-                req.setIdMessage(correlationKey);
-
-                CompletableFuture<ResponsePayload> future = submitRequest(correlationKey, req);
-                ResponsePayload response = future.get(AUTH_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+                LoginResponse response = clients.userService().login(
+                    LoginRequest.newBuilder().setUser(user).setPassword(password).build());
 
                 ObjectNode json = MAPPER.createObjectNode();
-                json.put("success", response.success());
-                json.put("message", response.message());
-                if (response.success()) {
+                json.put("success", response.getSuccess());
+                json.put("message", response.getMessage());
+                if (response.getSuccess()) {
                     json.put("token", jwtService.generateToken(user));
                 }
-                sendJson(exchange, response.success() ? 200 : 401, MAPPER.writeValueAsString(json));
-            } catch (TimeoutException e) {
-                sendJson(exchange, 504, "{\"success\":false,\"message\":\"Authentication timeout\"}");
+                sendJson(exchange, response.getSuccess() ? 200 : 401, MAPPER.writeValueAsString(json));
             } catch (IllegalArgumentException e) {
-                sendJson(exchange, 400, "{\"success\":false,\"message\":\"" + escapeJson(e.getMessage()) + "\"}");
+                sendJson(exchange, 400, errorJson(e.getMessage()));
+            } catch (StatusRuntimeException e) {
+                sendGrpcError(exchange, e, 401, "Authentication failed");
             } catch (Exception e) {
-                sendJson(exchange, 500, "{\"success\":false,\"message\":\"Internal server error\"}");
+                log.error("[AUTH] Login failed: {}", e.getMessage(), e);
+                sendJson(exchange, 500, errorJson("Internal server error"));
             }
         }
     }
@@ -159,8 +136,9 @@ public class AuthController {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             addCorsHeaders(exchange);
-            if (handlePreflight(exchange)) return;
-            if (!requirePost(exchange)) return;
+            if (handlePreflight(exchange) || !requirePost(exchange)) {
+                return;
+            }
 
             try {
                 JsonNode body = readBody(exchange);
@@ -171,30 +149,27 @@ public class AuthController {
                 validateEmail(email);
                 validatePassword(password);
 
-                String correlationKey = "register:" + UUID.randomUUID();
-                RegisterRequest req = new RegisterRequest();
-                req.setUser(user);
-                req.setEmail(email);
-                req.setPassword(password);
-                req.setMessageType("RegisterRequest");
-                req.setIdMessage(correlationKey);
-
-                CompletableFuture<ResponsePayload> future = submitRequest(correlationKey, req);
-                ResponsePayload response = future.get(AUTH_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+                RegisterResponse response = clients.userService().register(
+                    RegisterRequest.newBuilder()
+                        .setUser(user)
+                        .setEmail(email)
+                        .setPassword(password)
+                        .build());
 
                 ObjectNode json = MAPPER.createObjectNode();
-                json.put("success", response.success());
-                json.put("message", response.message());
-                if (response.success()) {
+                json.put("success", response.getSuccess());
+                json.put("message", response.getMessage());
+                if (response.getSuccess()) {
                     json.put("token", jwtService.generateToken(user));
                 }
-                sendJson(exchange, response.success() ? 201 : 409, MAPPER.writeValueAsString(json));
-            } catch (TimeoutException e) {
-                sendJson(exchange, 504, "{\"success\":false,\"message\":\"Registration timeout\"}");
+                sendJson(exchange, response.getSuccess() ? 201 : 409, MAPPER.writeValueAsString(json));
             } catch (IllegalArgumentException e) {
-                sendJson(exchange, 400, "{\"success\":false,\"message\":\"" + escapeJson(e.getMessage()) + "\"}");
+                sendJson(exchange, 400, errorJson(e.getMessage()));
+            } catch (StatusRuntimeException e) {
+                sendGrpcError(exchange, e, 409, "Registration failed");
             } catch (Exception e) {
-                sendJson(exchange, 500, "{\"success\":false,\"message\":\"Internal server error\"}");
+                log.error("[AUTH] Registration failed: {}", e.getMessage(), e);
+                sendJson(exchange, 500, errorJson("Internal server error"));
             }
         }
     }
@@ -203,25 +178,30 @@ public class AuthController {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             addCorsHeaders(exchange);
-            if (handlePreflight(exchange)) return;
-            if (!requirePost(exchange)) return;
+            if (handlePreflight(exchange) || !requirePost(exchange)) {
+                return;
+            }
 
             try {
                 JsonNode body = readBody(exchange);
                 String email = requireField(body, "email");
                 validateEmail(email);
 
-                ChangePasswordSendEmail req = new ChangePasswordSendEmail();
-                req.setEmail(email);
-                req.setMessageType("ChangePasswordSendEmail");
+                SendPasswordResetEmailResponse response = clients.userService().sendPasswordResetEmail(
+                    SendPasswordResetEmailRequest.newBuilder().setEmail(email).build());
+                if (response.getSent()) {
+                    storeResetCode(email, response.getCode());
+                }
 
-                mqttInterface.publishMessage(req);
-                // Always return success to prevent user enumeration
-                sendJson(exchange, 200, "{\"success\":true,\"message\":\"If the email exists, a reset code has been sent\"}");
+                sendJson(exchange, 200,
+                    "{\"success\":true,\"message\":\"If the email exists, a reset code has been sent\"}");
             } catch (IllegalArgumentException e) {
-                sendJson(exchange, 400, "{\"success\":false,\"message\":\"" + escapeJson(e.getMessage()) + "\"}");
+                sendJson(exchange, 400, errorJson(e.getMessage()));
+            } catch (StatusRuntimeException e) {
+                sendGrpcError(exchange, e, 500, "Unable to process password reset request");
             } catch (Exception e) {
-                sendJson(exchange, 500, "{\"success\":false,\"message\":\"Internal server error\"}");
+                log.error("[AUTH] Forgot-password failed: {}", e.getMessage(), e);
+                sendJson(exchange, 500, errorJson("Internal server error"));
             }
         }
     }
@@ -230,8 +210,9 @@ public class AuthController {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             addCorsHeaders(exchange);
-            if (handlePreflight(exchange)) return;
-            if (!requirePost(exchange)) return;
+            if (handlePreflight(exchange) || !requirePost(exchange)) {
+                return;
+            }
 
             try {
                 JsonNode body = readBody(exchange);
@@ -239,39 +220,42 @@ public class AuthController {
                 String code = requireField(body, "code");
                 String password = requireField(body, "password");
 
+                validateEmail(email);
                 validatePassword(password);
 
-                // Verify the reset code
-                ResetCode stored = pendingResetCodes.get(email.toLowerCase());
-                if (stored == null || !stored.isValid(code)) {
+                ResetCode storedCode = pendingResetCodes.get(email.toLowerCase());
+                if (storedCode == null || !storedCode.isValid(code)) {
                     pendingResetCodes.remove(email.toLowerCase());
-                    sendJson(exchange, 403, "{\"success\":false,\"message\":\"Invalid or expired reset code\"}");
+                    sendJson(exchange, 403, errorJson("Invalid or expired reset code"));
                     return;
                 }
 
-                // Code is valid — consume it (single use)
                 pendingResetCodes.remove(email.toLowerCase());
+                ChangePasswordByEmailResponse response = clients.userService().changePasswordByEmail(
+                    ChangePasswordByEmailRequest.newBuilder()
+                        .setEmail(email)
+                        .setPassword(password)
+                        .build());
 
-                ChangePasswordEmail req = new ChangePasswordEmail();
-                req.setEmail(email);
-                req.setPassword(password);
-                req.setMessageType("ChangePasswordEmail");
-
-                mqttInterface.publishMessage(req);
-                sendJson(exchange, 200, "{\"success\":true,\"message\":\"Password updated\"}");
+                if (response.getSuccess()) {
+                    sendJson(exchange, 200, "{\"success\":true,\"message\":\"Password updated\"}");
+                } else {
+                    sendJson(exchange, 500, errorJson("Password update failed"));
+                }
             } catch (IllegalArgumentException e) {
-                sendJson(exchange, 400, "{\"success\":false,\"message\":\"" + escapeJson(e.getMessage()) + "\"}");
+                sendJson(exchange, 400, errorJson(e.getMessage()));
+            } catch (StatusRuntimeException e) {
+                sendGrpcError(exchange, e, 500, "Password update failed");
             } catch (Exception e) {
-                sendJson(exchange, 500, "{\"success\":false,\"message\":\"Internal server error\"}");
+                log.error("[AUTH] Reset-password failed: {}", e.getMessage(), e);
+                sendJson(exchange, 500, errorJson("Internal server error"));
             }
         }
     }
 
-    // ── Utilities ─────────────────────────────────────────────────────────
-
     private JsonNode readBody(HttpExchange exchange) throws IOException {
-        try (InputStream is = exchange.getRequestBody()) {
-            byte[] bytes = is.readNBytes(MAX_BODY_SIZE);
+        try (InputStream inputStream = exchange.getRequestBody()) {
+            byte[] bytes = inputStream.readNBytes(MAX_BODY_SIZE);
             return MAPPER.readTree(bytes);
         }
     }
@@ -297,7 +281,7 @@ public class AuthController {
 
     private boolean requirePost(HttpExchange exchange) throws IOException {
         if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
-            sendJson(exchange, 405, "{\"success\":false,\"message\":\"Method not allowed\"}");
+            sendJson(exchange, 405, errorJson("Method not allowed"));
             return false;
         }
         return true;
@@ -317,16 +301,50 @@ public class AuthController {
         return false;
     }
 
+    private void sendGrpcError(HttpExchange exchange, StatusRuntimeException e, int defaultStatus, String defaultMessage)
+        throws IOException {
+        String message = grpcMessage(e, defaultMessage);
+        int status = grpcHttpStatus(e.getStatus().getCode(), defaultStatus);
+        log.error("[AUTH] gRPC error: {}", message, e);
+        sendJson(exchange, status, errorJson(message));
+    }
+
+    private int grpcHttpStatus(Status.Code code, int defaultStatus) {
+        return switch (code) {
+            case INVALID_ARGUMENT -> 400;
+            case UNAUTHENTICATED -> 401;
+            case PERMISSION_DENIED -> 403;
+            case NOT_FOUND -> 404;
+            case ALREADY_EXISTS -> 409;
+            case FAILED_PRECONDITION -> 412;
+            case DEADLINE_EXCEEDED -> 504;
+            case UNAVAILABLE -> 503;
+            default -> defaultStatus;
+        };
+    }
+
+    private String grpcMessage(StatusRuntimeException e, String defaultMessage) {
+        String description = e.getStatus().getDescription();
+        if (description != null && !description.isBlank()) {
+            return description;
+        }
+        return defaultMessage;
+    }
+
     private static void sendJson(HttpExchange exchange, int status, String json) throws IOException {
         byte[] bytes = json.getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().set("Content-Type", "application/json");
         exchange.sendResponseHeaders(status, bytes.length);
-        try (OutputStream os = exchange.getResponseBody()) {
-            os.write(bytes);
+        try (OutputStream outputStream = exchange.getResponseBody()) {
+            outputStream.write(bytes);
         }
     }
 
-    private static String escapeJson(String s) {
-        return s.replace("\\", "\\\\").replace("\"", "\\\"");
+    private static String errorJson(String message) {
+        return "{\"success\":false,\"message\":\"" + escapeJson(message) + "\"}";
+    }
+
+    private static String escapeJson(String value) {
+        return value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 }

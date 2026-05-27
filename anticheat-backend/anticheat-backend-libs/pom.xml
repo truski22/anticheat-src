@@ -11,8 +11,8 @@
 
     <modules>
         <module>protocol</module>
-        <module>mqtt-lib</module>
         <module>ws-lib</module>
+        <module>grpc-api</module>
     </modules>
 
     <properties>

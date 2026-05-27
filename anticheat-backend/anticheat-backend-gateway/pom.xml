@@ -65,13 +65,19 @@
         </dependency>
         <dependency>
             <groupId>com.chessfraud</groupId>
+            <artifactId>protocol</artifactId>
+            <version>1.0-SNAPSHOT</version>
+            <scope>compile</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.chessfraud</groupId>
             <artifactId>ws-lib</artifactId>
             <version>1.0-SNAPSHOT</version>
             <scope>compile</scope>
         </dependency>
         <dependency>
             <groupId>com.chessfraud</groupId>
-            <artifactId>mqtt-lib</artifactId>
+            <artifactId>grpc-api</artifactId>
             <version>1.0-SNAPSHOT</version>
             <scope>compile</scope>
         </dependency>
@@ -92,6 +98,17 @@
     </properties>
     <build>
         <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.11.0</version>
+                <configuration>
+                    <excludes>
+                        <exclude>handler/**</exclude>
+                        <exclude>mqtt/**</exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>

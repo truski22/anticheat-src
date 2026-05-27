@@ -1,6 +1,6 @@
 package service;
 
-import mqtt.Game;
+import model.Game;
 
 import java.util.List;
 

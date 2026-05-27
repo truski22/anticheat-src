@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package chessfraud.game;
+
+option java_multiple_files = true;
+option java_package = "com.chessfraud.grpc.game";
+
+service GameService {
+  rpc GetGames(GetGamesRequest) returns (GetGamesResponse);
+  rpc SaveGame(SaveGameRequest) returns (SaveGameResponse);
+}
+
+message GameRecord {
+  string moves = 1;
+  bool legal = 2;
+}
+
+message GetGamesRequest {
+  string user = 1;
+}
+
+message GetGamesResponse {
+  repeated GameRecord games = 1;
+}
+
+message SaveGameRequest {
+  string user = 1;
+  string moves = 2;
+  bool legal = 3;
+}
+
+message SaveGameResponse {
+  bool success = 1;
+  string message = 2;
+}

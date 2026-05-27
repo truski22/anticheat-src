@@ -27,6 +27,7 @@
 - [CI/CD](#cicd)
 - [Variables de Entorno](#variables-de-entorno)
 - [Seguridad](#seguridad)
+- [Desarrollos Futuros](#desarrollos-futuros)
 
 ---
 

@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package chessfraud.analysis;
+
+option java_multiple_files = true;
+option java_package = "com.chessfraud.grpc.analysis";
+
+service AnalysisService {
+  rpc AnalyzeGame(AnalyzeGameRequest) returns (AnalyzeGameResponse);
+}
+
+message AnalyzeGameRequest {
+  string user = 1;
+  string moves = 2;
+}
+
+message AnalyzeGameResponse {
+  bool legal = 1;
+  repeated int32 white = 2;
+  repeated int32 black = 3;
+}

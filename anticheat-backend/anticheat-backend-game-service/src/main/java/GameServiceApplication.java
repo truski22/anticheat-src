@@ -1,16 +1,26 @@
-import logic.GameRequestProcessor;
+import grpc.GameServiceGrpcImpl;
+import grpc.GrpcServer;
+import service.GamePersistenceService;
+import utils.Database;
 import utils.HealthServer;
 
 public class GameServiceApplication {
-    private static final String MQTT_CONFIG_PATH = "chessfraud-libs/protocol/src/main/configuration/game-service/mqtt.properties";
     private static final int HEALTH_PORT = 9092;
+    private static final int GRPC_PORT = 9091;
 
-    public void startModule() {
+    public void startModule() throws Exception {
         HealthServer.start(HEALTH_PORT);
-        new GameRequestProcessor(MQTT_CONFIG_PATH);
+
+        Database database = new Database();
+        GamePersistenceService gameService = new GamePersistenceService(database);
+
+        GameServiceGrpcImpl grpcImpl = new GameServiceGrpcImpl(gameService);
+        GrpcServer server = new GrpcServer(GRPC_PORT, grpcImpl);
+        server.start();
+        server.blockUntilShutdown();
     }
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception {
         new GameServiceApplication().startModule();
     }
 }

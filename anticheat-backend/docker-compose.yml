@@ -1,22 +1,5 @@
 services:
 
-  mosquitto:
-    image: eclipse-mosquitto:2
-    ports:
-      - "1883:1883"
-    environment:
-      MQTT_USER: ${MQTT_USER:-chessfraud}
-      MQTT_PASSWORD: ${MQTT_PASSWORD:-change-me-in-production}
-    volumes:
-      - ./anticheat-backend-infra/mqtt/docker-entrypoint.sh:/docker-entrypoint.sh
-    entrypoint: ["/bin/sh", "/docker-entrypoint.sh"]
-    healthcheck:
-      test: ["CMD-SHELL", "mosquitto_pub -h localhost -p 1883 -t healthcheck -m ping -q 0 -u ${MQTT_USER:-chessfraud} -P ${MQTT_PASSWORD:-change-me-in-production}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-
   postgres:
     image: postgres:16-alpine
     environment:
@@ -51,6 +34,58 @@ services:
       retries: 5
       start_period: 30s
 
+  user-service:
+    build:
+      context: .
+      dockerfile: anticheat-backend-user-service/Dockerfile
+    ports:
+      - "9090:9090"
+      - "9091:9091"
+    environment:
+      DB_HOST: postgres
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      GRPC_PORT: "9090"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: on-failure
+
+  game-service:
+    build:
+      context: .
+      dockerfile: anticheat-backend-game-service/Dockerfile
+    ports:
+      - "9092:9091"
+      - "9093:9092"
+    environment:
+      DB_HOST: postgres
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD}
+      GRPC_PORT: "9091"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: on-failure
+
+  analysis-service:
+    build:
+      context: .
+      dockerfile: anticheat-backend-analysis-service/Dockerfile
+    ports:
+      - "9094:9092"
+      - "9095:9093"
+    environment:
+      CHESS_INSIGHTS_URL: http://ml-service:5002/eval
+      ML_SERVICE_TOKEN: ${ML_SERVICE_TOKEN}
+      GRPC_PORT: "9092"
+    depends_on:
+      ml-service:
+        condition: service_healthy
+    restart: on-failure
+
   gateway:
     build:
       context: .
@@ -62,67 +97,16 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       AUTH_PORT: "8081"
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:4200}
-      MQTT_BROKER_URL: ${MQTT_BROKER_URL:-tcp://mosquitto:1883}
-      MQTT_USER: ${MQTT_USER:-chessfraud}
-      MQTT_PASSWORD: ${MQTT_PASSWORD:-change-me-in-production}
+      USER_SERVICE_HOST: user-service
+      USER_SERVICE_GRPC_PORT: "9090"
+      GAME_SERVICE_HOST: game-service
+      GAME_SERVICE_GRPC_PORT: "9091"
+      ANALYSIS_SERVICE_HOST: analysis-service
+      ANALYSIS_SERVICE_GRPC_PORT: "9092"
     depends_on:
-      mosquitto:
-        condition: service_healthy
-    restart: on-failure
-
-  user-service:
-    build:
-      context: .
-      dockerfile: anticheat-backend-user-service/Dockerfile
-    environment:
-      DB_HOST: postgres
-      DB_USER: ${DB_USER:-postgres}
-      DB_PASSWORD: ${DB_PASSWORD}
-      SMTP_USER: ${SMTP_USER}
-      SMTP_PASSWORD: ${SMTP_PASSWORD}
-      MQTT_BROKER_URL: ${MQTT_BROKER_URL:-tcp://mosquitto:1883}
-      MQTT_USER: ${MQTT_USER:-chessfraud}
-      MQTT_PASSWORD: ${MQTT_PASSWORD:-change-me-in-production}
-    depends_on:
-      mosquitto:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
-    restart: on-failure
-
-  game-service:
-    build:
-      context: .
-      dockerfile: anticheat-backend-game-service/Dockerfile
-    environment:
-      DB_HOST: postgres
-      DB_USER: ${DB_USER:-postgres}
-      DB_PASSWORD: ${DB_PASSWORD}
-      MQTT_BROKER_URL: ${MQTT_BROKER_URL:-tcp://mosquitto:1883}
-      MQTT_USER: ${MQTT_USER:-chessfraud}
-      MQTT_PASSWORD: ${MQTT_PASSWORD:-change-me-in-production}
-    depends_on:
-      mosquitto:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
-    restart: on-failure
-
-  analysis-service:
-    build:
-      context: .
-      dockerfile: anticheat-backend-analysis-service/Dockerfile
-    environment:
-      CHESS_INSIGHTS_URL: http://ml-service:5002/eval
-      ML_SERVICE_TOKEN: ${ML_SERVICE_TOKEN}
-      MQTT_BROKER_URL: ${MQTT_BROKER_URL:-tcp://mosquitto:1883}
-      MQTT_USER: ${MQTT_USER:-chessfraud}
-      MQTT_PASSWORD: ${MQTT_PASSWORD:-change-me-in-production}
-    depends_on:
-      mosquitto:
-        condition: service_healthy
-      ml-service:
-        condition: service_healthy
+      - user-service
+      - game-service
+      - analysis-service
     restart: on-failure
 
 volumes:

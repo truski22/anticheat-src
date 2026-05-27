@@ -1,16 +1,30 @@
-import logic.UserRequestProcessor;
+import config.UserServiceConfig;
+import grpc.GrpcServer;
+import grpc.UserServiceGrpcImpl;
+import service.EmailNotificationService;
+import service.UserAccountService;
+import utils.Database;
 import utils.HealthServer;
 
 public class UserServiceApplication {
-    private static final String MQTT_CONFIG_PATH = "chessfraud-libs/protocol/src/main/configuration/user-service/mqtt.properties";
     private static final int HEALTH_PORT = 9091;
+    private static final int GRPC_PORT = 9090;
 
-    public void startModule() {
+    public void startModule() throws Exception {
         HealthServer.start(HEALTH_PORT);
-        new UserRequestProcessor(MQTT_CONFIG_PATH);
+
+        Database database = new Database();
+        UserServiceConfig config = UserServiceConfig.fromEnvironment();
+        UserAccountService accountService = new UserAccountService(database);
+        EmailNotificationService emailService = new EmailNotificationService(config);
+
+        UserServiceGrpcImpl grpcImpl = new UserServiceGrpcImpl(accountService, emailService);
+        GrpcServer server = new GrpcServer(GRPC_PORT, grpcImpl);
+        server.start();
+        server.blockUntilShutdown();
     }
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception {
         new UserServiceApplication().startModule();
     }
 }

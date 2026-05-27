@@ -1,0 +1,75 @@
+syntax = "proto3";
+
+package chessfraud.user;
+
+option java_multiple_files = true;
+option java_package = "com.chessfraud.grpc.user";
+
+service UserService {
+  rpc Login(LoginRequest) returns (LoginResponse);
+  rpc Register(RegisterRequest) returns (RegisterResponse);
+  rpc GetUserInfo(UserInfoRequest) returns (UserInfoResponse);
+  rpc ChangePassword(ChangePasswordRequest) returns (ChangePasswordResponse);
+  rpc ChangePasswordByEmail(ChangePasswordByEmailRequest) returns (ChangePasswordByEmailResponse);
+  rpc SendPasswordResetEmail(SendPasswordResetEmailRequest) returns (SendPasswordResetEmailResponse);
+}
+
+message LoginRequest {
+  string user = 1;
+  string password = 2;
+}
+
+message LoginResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message RegisterRequest {
+  string user = 1;
+  string email = 2;
+  string password = 3;
+}
+
+message RegisterResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message UserInfoRequest {
+  string user = 1;
+}
+
+message UserInfoResponse {
+  string user = 1;
+  string email = 2;
+  int32 total_games = 3;
+  int32 cheat_games = 4;
+  int32 legal_games = 5;
+}
+
+message ChangePasswordRequest {
+  string user = 1;
+  string password = 2;
+}
+
+message ChangePasswordResponse {
+  bool success = 1;
+}
+
+message ChangePasswordByEmailRequest {
+  string email = 1;
+  string password = 2;
+}
+
+message ChangePasswordByEmailResponse {
+  bool success = 1;
+}
+
+message SendPasswordResetEmailRequest {
+  string email = 1;
+}
+
+message SendPasswordResetEmailResponse {
+  bool sent = 1;
+  string code = 2;
+}
