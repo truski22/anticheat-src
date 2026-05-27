@@ -29,62 +29,6 @@ Traditional detection relies on post-game statistical analysis, which is slow an
 
 ---
 
-## Architecture
-
-```mermaid
-graph LR
-    subgraph Client
-        FE[Angular Frontend]
-    end
-
-    subgraph Gateway
-        WS[WebSocket Server<br/>Port 8080]
-        REST[REST Auth<br/>Port 8081]
-        JWT[JWT Validation]
-        RL[Rate Limiter]
-    end
-
-    subgraph Services
-        GS[Game Service<br/>gRPC :9091]
-        US[User Service<br/>gRPC :9090]
-        AS[Analysis Service<br/>gRPC :9092]
-    end
-
-    subgraph MLLayer[ML]
-        ML[ML Service<br/>FastAPI + Stockfish]
-    end
-
-    subgraph Storage
-        PG[(PostgreSQL)]
-    end
-
-    FE -->|WebSocket + JWT| WS
-    FE -->|HTTP| REST
-    REST --> JWT
-    WS --> JWT
-    WS --> RL
-    WS -->|gRPC| GS
-    WS -->|gRPC| US
-    WS -->|gRPC| AS
-    AS -->|HTTP /eval| ML
-    GS --> PG
-    US --> PG
-
-    style FE fill:#e1f5fe
-    style PG fill:#e8f5e9
-    style ML fill:#fce4ec
-```
-
-### Data Flow
-
-1. **Client** connects via WebSocket with JWT token → Gateway validates and rate-limits
-2. **Gateway** deserializes typed `ChessMessage` envelope → calls the appropriate backend service via gRPC
-3. **Game/User Service** processes request → persists to PostgreSQL → returns gRPC response
-4. **Analysis Service** receives game → calls ML Service HTTP API → returns fraud classification
-5. **ML Service** runs Stockfish evaluation → extracts 23 features → predicts with trained model
-
----
-
 ## Quick Start
 
 ```bash
@@ -149,7 +93,7 @@ Each service has its own `README.md` with inputs, outputs, and standalone run in
 
 ### Why plain Java over Spring?
 
-This project demonstrates **core Java engineering** — no framework magic. Every WebSocket server, HTTP endpoint, MQTT client, and connection pool is built from explicit code. The result is a lightweight system where every line is intentional and traceable, which matters for a portfolio project.
+This project demonstrates **core Java engineering** — no framework magic. Every WebSocket server, HTTP endpoint, gRPC service, and connection pool is built from explicit code. The result is a lightweight system where every line is intentional and traceable, which matters for a portfolio project.
 
 ### Why gRPC over Kafka/MQTT?
 

@@ -1,6 +1,6 @@
 # Anti-Cheat — Chess Fraud Detection System
 
-> Plataforma de detección de trampas en ajedrez online mediante microservicios, event-streaming MQTT y machine learning.
+> Plataforma de detección de trampas en ajedrez online mediante microservicios, gRPC y machine learning.
 
 [![Java](https://img.shields.io/badge/Java-21-orange?logo=openjdk)](https://openjdk.org/)
 [![Angular](https://img.shields.io/badge/Angular-19-DD0031?logo=angular)](https://angular.dev/)
@@ -50,20 +50,60 @@ Este sistema construye un **pipeline de detección de fraude** end-to-end que:
 
 ## Arquitectura
 
-<p align="center">
-  <img src="docs/architecture.png" alt="Diagrama de arquitectura del sistema Anti-Cheat" width="100%">
-</p>
+```mermaid
+graph LR
+    subgraph Client
+        FE[Angular Frontend]
+    end
+
+    subgraph Gateway
+        WS[WebSocket Server<br/>Port 8080]
+        REST[REST Auth<br/>Port 8081]
+        JWT[JWT Validation]
+        RL[Rate Limiter]
+    end
+
+    subgraph Services
+        GS[Game Service<br/>gRPC :9091]
+        US[User Service<br/>gRPC :9090]
+        AS[Analysis Service<br/>gRPC :9092]
+    end
+
+    subgraph MLLayer[ML]
+        ML[ML Service<br/>FastAPI + Stockfish]
+    end
+
+    subgraph Storage
+        PG[(PostgreSQL)]
+    end
+
+    FE -->|WebSocket + JWT| WS
+    FE -->|HTTP| REST
+    REST --> JWT
+    WS --> JWT
+    WS --> RL
+    WS -->|gRPC| GS
+    WS -->|gRPC| US
+    WS -->|gRPC| AS
+    AS -->|HTTP /eval| ML
+    GS --> PG
+    US --> PG
+
+    style FE fill:#e1f5fe
+    style PG fill:#e8f5e9
+    style ML fill:#fce4ec
+```
 
 ### Flujo de datos
 
 | Flujo | Camino |
 |-------|--------|
-| **Login / Register** | Cliente → REST `POST /auth/login` → Gateway → MQTT `user/info` → User Service → PostgreSQL → JWT |
+| **Login / Register** | Cliente → REST `POST /auth/login` → Gateway → gRPC → User Service → PostgreSQL → JWT |
 | **Conexión WS** | Cliente → `ws://host:8080/ws?token=JWT` → Gateway valida JWT + rate-limit |
-| **Analizar partida** | WS `ANALYZE_GAME` → Gateway → MQTT `game/analyze` → Analysis Service → HTTP `POST /eval` → ML Service (Stockfish + RandomForest) → resultado |
-| **Guardar partida** | WS `SAVE_GAME` → Gateway → MQTT `game/info` → Game Service → INSERT en `games` + UPDATE contadores en `users` |
-| **Consultar perfil** | WS `USER_INFO_REQUEST` → Gateway → MQTT `user/info` → User Service → SELECT `users` |
-| **Listar partidas** | WS `GAMES_REQUEST` → Gateway → MQTT `game/info` → Game Service → SELECT `games` |
+| **Analizar partida** | WS `ANALYZE_GAME` → Gateway → gRPC → Analysis Service → HTTP `POST /eval` → ML Service (Stockfish + RandomForest) → resultado |
+| **Guardar partida** | WS `SAVE_GAME` → Gateway → gRPC → Game Service → INSERT en `games` + UPDATE contadores en `users` |
+| **Consultar perfil** | WS `USER_INFO_REQUEST` → Gateway → gRPC → User Service → SELECT `users` |
+| **Listar partidas** | WS `GAMES_REQUEST` → Gateway → gRPC → Game Service → SELECT `games` |
 
 ---
 
@@ -75,7 +115,7 @@ Este sistema construye un **pipeline de detección de fraude** end-to-end que:
 | **Gateway** | Java 21, Tyrus WebSocket, JDK HttpServer | Punto de entrada WS + REST, rate limiter |
 | **Microservicios** | Java 21, Maven, JDBC, BCrypt, Jackson | Lógica de negocio (user, game, analysis) |
 | **ML** | Python 3.11, FastAPI, scikit-learn, python-chess, Stockfish | Pipeline de detección de fraude |
-| **Mensajería** | Eclipse Mosquitto (MQTT 3.1.1) | Event bus asíncrono entre servicios |
+| **Comunicación** | gRPC (Protocol Buffers, HTTP/2) | RPC entre servicios |
 | **Base de datos** | PostgreSQL 16 Alpine | Persistencia de usuarios y partidas |
 | **Auth** | JWT HMAC-SHA256 (24h TTL) | Autenticación stateless |
 | **Infra** | Docker Compose · Kubernetes · GitHub Actions | Orquestación y CI/CD |
@@ -90,22 +130,22 @@ Java es el lenguaje con el que tengo mayor dominio y productividad, lo que me pe
 
 - **Tipado fuerte y sistema de tipos robusto**: En un protocolo con múltiples tipos de mensaje (`ChessMessage`, `PayloadRegistry`), el tipado estático detecta errores de serialización/deserialización en compilación, no en runtime.
 - **Ecosistema maduro para servicios de larga vida**: JDBC nativo, BCrypt, Jackson, Maven — sin necesidad de frameworks pesados como Spring. Los servicios arrancan en ~2 segundos.
-- **Concurrencia nativa**: `ExecutorService`, `ConcurrentHashMap` y los clientes MQTT de Eclipse Paho manejan bien la concurrencia multi-usuario sin dependencias externas.
+- **Concurrencia nativa**: `ExecutorService`, `ConcurrentHashMap` y gRPC manejan bien la concurrencia multi-usuario sin dependencias externas.
 - **Compatibilidad con Docker**: Las JVMs modernas respetan los `cgroup` limits de los contenedores (CPU/memoria), lo que facilita el sizing en Kubernetes.
 
 **Alternativa considerada**: Go habría ofrecido binarios más ligeros y menor consumo de memoria, pero la menor experiencia con el lenguaje habría ralentizado el desarrollo sin aportar beneficios significativos dado el volumen de tráfico esperado.
 
-### ¿Por qué MQTT y no Kafka?
+### ¿Por qué gRPC y no Kafka/MQTT?
 
-MQTT (via Eclipse Mosquitto) fue la elección natural como bus de eventos por varias razones:
+gRPC encaja mejor que un message broker para la comunicación entre servicios en este sistema:
 
-- **Familiaridad académica**: MQTT se cubrió en el máster como protocolo de mensajería ligero para IoT y sistemas distribuidos. Kafka no formaba parte del temario, y este proyecto es una extensión del TFM.
-- **Protocolo ligero y sin overhead**: MQTT 3.1.1 tiene un overhead de 2 bytes por mensaje. Para un sistema donde los mensajes son comandos individuales (analizar partida, guardar resultado), no se necesita el log persistente ni las consumer groups de Kafka.
-- **Simplicidad operacional**: Mosquitto es un binario de ~1 MB que arranca en milisegundos con un fichero de configuración de 3 líneas. Kafka requiere ZooKeeper (o KRaft), más memoria, más configuración.
-- **Patrón pub/sub puro**: El sistema necesita enrutar mensajes del gateway a servicios específicos por topic (`user/info`, `game/analyze`). MQTT implementa este patrón de forma nativa sin la complejidad de particiones y offsets.
-- **Footprint en Docker/K8s**: Mosquitto consume ~32 MB de RAM. Un broker Kafka necesita mínimo 1 GB.
+- **Contratos fuertemente tipados** — los ficheros `.proto` definen la API. El compilador detecta cambios incompatibles en compilación, no en runtime con un JSON malformado.
+- **Semántica RPC directa** — el gateway llama a `UserService.Login()` como un método local. Sin routing por topics, sin correlation IDs, sin listeners de respuesta. El código refleja lo que hace.
+- **HTTP/2 multiplexing** — múltiples RPCs concurrentes sobre una única conexión TCP. Menor latencia y menos recursos que un broker intermediario.
+- **Sin dependencia de broker** — eliminar Mosquitto/Kafka es un componente menos que desplegar, monitorizar y depurar. Menos piezas = menos modos de fallo.
+- **Generación de código** — los stubs Java se auto-generan desde `.proto`. Añadir un nuevo RPC es: definirlo en proto → regenerar → implementar el método.
 
-**Cuándo Kafka sería mejor**: Si el sistema escalase a miles de partidas concurrentes con necesidad de replay de eventos, persistencia del log, o procesamiento stream (análisis en tiempo real de torneos), Kafka sería la elección correcta.
+Kafka/MQTT tienen sentido cuando necesitas **logs de eventos durables**, **fan-out a múltiples consumidores** o semántica **fire-and-forget**. Este sistema no lo necesita — cada petición requiere exactamente una respuesta, inmediatamente. gRPC modela eso directamente.
 
 ### ¿Por qué Python + FastAPI para el ML Service?
 
@@ -140,14 +180,13 @@ anticheat-src/
 │   ├── anticheat-backend-ml-service/       # FastAPI + Stockfish + RandomForest
 │   ├── anticheat-backend-libs/
 │   │   ├── protocol/                       # DTOs, ChessMessage, MessageType, PayloadRegistry
-│   │   ├── mqtt-lib/                       # Abstracción MQTT (publish/subscribe con auth)
+│   │   ├── grpc-api/                       # Definiciones Protobuf (.proto) y stubs generados
 │   │   └── ws-lib/                         # Librería WebSocket (Tyrus 1.13)
 │   ├── anticheat-backend-infra/
 │   │   ├── docker/init.sql                 # Schema PostgreSQL (users + games)
-│   │   ├── mqtt/                           # Mosquitto config + entrypoint
-│   │   └── k8s/                            # 10 manifiestos Kubernetes
+│   │   └── k8s/                            # Manifiestos Kubernetes
 │   ├── docs/
-│   │   ├── protocol.md                     # Referencia completa del protocolo WS/MQTT
+│   │   ├── protocol.md                     # Referencia completa del protocolo WS
 │   │   └── protocol.ts                     # Interfaces TypeScript del protocolo
 │   ├── .github/workflows/ci.yml            # Pipeline CI (build + test)
 │   ├── docker-compose.yml                  # Orquestación local (7 servicios)
@@ -202,8 +241,10 @@ make logs
 |----------|--------|-----|-------------|
 | Gateway (WebSocket) | `8080` | `ws://localhost:8080/ws?token=JWT` | Conexión WS autenticada |
 | Gateway (REST Auth) | `8081` | `http://localhost:8081/auth/login` | Endpoints de autenticación |
+| User Service (gRPC) | `9090` | — | Servicio de usuarios |
+| Game Service (gRPC) | `9092` | — | Servicio de partidas |
+| Analysis Service (gRPC) | `9094` | — | Servicio de análisis ML |
 | ML Service | `5002` | `http://localhost:5002/docs` | Documentación OpenAPI interactiva |
-| MQTT Broker | `1883` | `mqtt://localhost:1883` | Broker MQTT (requiere auth) |
 | PostgreSQL | `5432` | `postgresql://localhost:5432/anticheat` | Base de datos |
 
 ### 2. Frontend
@@ -239,15 +280,15 @@ El proyecto incluye **10 manifiestos Kubernetes** listos para desplegar en un cl
 | Archivo | Recurso | Descripción |
 |---------|---------|-------------|
 | `00-namespace.yaml` | Namespace `anticheat` | Aislamiento lógico de todos los recursos |
-| `01-configmap.yaml` | ConfigMap × 3 | `app-config` (URLs, paths), `mosquitto-config` (broker conf), `postgres-init-config` (init.sql) |
-| `02-secret.yaml` | Secret `anticheat-secret` | Credenciales (DB, JWT, SMTP, MQTT, ML token) — **cambiar antes de aplicar** |
-| `03-mosquitto.yaml` | Deployment + ClusterIP Service | Broker MQTT, probes TCP, `50m/32Mi` → `100m/64Mi` |
+| `01-configmap.yaml` | ConfigMap | `app-config` (URLs, paths), `postgres-init-config` (init.sql) |
+| `02-secret.yaml` | Secret `anticheat-secret` | Credenciales (DB, JWT, SMTP, ML token) — **cambiar antes de aplicar** |
+| `03-mosquitto.yaml` | — | _(Eliminado — gRPC reemplaza broker)_ |
 | `04-postgres.yaml` | PVC (1Gi) + StatefulSet + Headless Service | PostgreSQL 16 con persistencia, probes `pg_isready`, `250m/256Mi` → `500m/512Mi` |
 | `05-ml-service.yaml` | Deployment + ClusterIP Service | ML Service (FastAPI + Stockfish), probes HTTP `/health`, `500m/512Mi` → `1000m/1Gi` |
-| `06-gateway.yaml` | Deployment + **NodePort** Service (30080) | Gateway WS+REST, initContainer espera MQTT, probes HTTP `/health:8081` |
-| `07-user-service.yaml` | Deployment (sin Service externo) | Comunica solo via MQTT+DB, initContainers esperan MQTT y PostgreSQL |
-| `08-game-service.yaml` | Deployment (sin Service externo) | Comunica solo via MQTT+DB, initContainers esperan MQTT y PostgreSQL |
-| `09-analysis-service.yaml` | Deployment (sin Service externo) | Comunica via MQTT+HTTP, initContainers esperan MQTT y ML Service |
+| `06-gateway.yaml` | Deployment + **NodePort** Service (30080) | Gateway WS+REST, probes HTTP `/health:8081` |
+| `07-user-service.yaml` | Deployment + ClusterIP Service | gRPC server :9090, initContainers esperan PostgreSQL |
+| `08-game-service.yaml` | Deployment + ClusterIP Service | gRPC server :9091, initContainers esperan PostgreSQL |
+| `09-analysis-service.yaml` | Deployment + ClusterIP Service | gRPC server :9092, initContainers esperan ML Service |
 
 ### Características del despliegue K8s
 
@@ -319,13 +360,13 @@ Todos los mensajes usan el envelope `ChessMessage`:
 
 #### Client → Server
 
-| Tipo | Payload | MQTT Topic | Descripción |
-|------|---------|------------|-------------|
-| `USER_INFO_REQUEST` | _(ninguno)_ | `user/info` | Solicitar perfil del usuario |
-| `GAMES_REQUEST` | _(ninguno)_ | `game/info` | Solicitar lista de partidas |
-| `ANALYZE_GAME` | `{ moves: string }` | `game/analyze` | Analizar partida (PGN moves) |
-| `SAVE_GAME` | `{ moves: string, legal: boolean }` | `game/info` | Guardar partida analizada |
-| `CHANGE_PASSWORD` | `{ password: string }` | `user/password` | Cambiar contraseña (autenticado) |
+| Tipo | Payload | Descripción |
+|------|---------|-------------|
+| `USER_INFO_REQUEST` | _(ninguno)_ | Solicitar perfil del usuario |
+| `GAMES_REQUEST` | _(ninguno)_ | Solicitar lista de partidas |
+| `ANALYZE_GAME` | `{ moves: string }` | Analizar partida (PGN moves) |
+| `SAVE_GAME` | `{ moves: string, legal: boolean }` | Guardar partida analizada |
+| `CHANGE_PASSWORD` | `{ password: string }` | Cambiar contraseña (autenticado) |
 
 #### Server → Client
 
@@ -401,26 +442,26 @@ El frontend implementa un design system propio basado en CSS custom properties:
 | JWT | HMAC-SHA256, TTL 24h, username como subject |
 | Rate limiter | 10 msg/s por usuario, desconexión al exceder |
 | Origin check | Lista blanca configurable vía `ALLOWED_ORIGINS` |
-| MQTT bridge | Traduce mensajes WS ↔ topics MQTT, inyecta username del JWT |
+| gRPC client | Traduce mensajes WS → llamadas gRPC a servicios backend |
 
-### User Service (sin puerto expuesto)
+### User Service (gRPC :9090)
 
 - **Autenticación**: BCrypt cost factor 12
 - **Gestión de perfiles**: email, estadísticas de partidas
 - **SMTP**: Envío de emails para reset de contraseña (Gmail compatible)
-- **Comunicación**: Solo MQTT (subscribe `user/info`, `user/password`) + PostgreSQL
+- **Comunicación**: gRPC server + PostgreSQL
 
-### Game Service (sin puerto expuesto)
+### Game Service (gRPC :9091)
 
 - **CRUD de partidas**: INSERT + SELECT sobre tabla `games`
 - **Actualización de stats**: Al guardar, actualiza `total_games`, `cheated_games`, `fair_games` en `users` (transaccional)
-- **Comunicación**: Solo MQTT (subscribe `game/info`) + PostgreSQL
+- **Comunicación**: gRPC server + PostgreSQL
 
-### Analysis Service (sin puerto expuesto)
+### Analysis Service (gRPC :9092)
 
-- **Orquestación**: Recibe partida por MQTT, invoca ML Service por HTTP
+- **Orquestación**: Recibe partida por gRPC, invoca ML Service por HTTP
 - **Caché LRU**: Evita re-análisis de partidas ya procesadas
-- **Comunicación**: MQTT (subscribe `game/analyze`) + HTTP a ML Service
+- **Comunicación**: gRPC server + HTTP a ML Service
 
 ### ML Service (Python FastAPI)
 
@@ -474,7 +515,7 @@ test-ml-service (independiente, Python 3.11 + pytest)
 
 | Job | Qué hace |
 |-----|----------|
-| `build-libs` | Compila `chessfraud-libs` (protocol, mqtt-lib, ws-lib) con Maven |
+| `build-libs` | Compila `anticheat-backend-libs` (protocol, grpc-api, ws-lib) con Maven |
 | `build-gateway` | Compila el gateway (`mvn package`) |
 | `build-user-service` | Compila user-service |
 | `build-game-service` | Compila game-service |
@@ -498,8 +539,6 @@ Copiar `.env.example` a `.env` y configurar:
 | `AUTH_TOKEN` | ✅ | ML Service | Token Bearer para autenticar peticiones HTTP |
 | `SMTP_USER` | ✅ | User Service | Email para envío SMTP (p.ej. Gmail) |
 | `SMTP_PASSWORD` | ✅ | User Service | Contraseña de aplicación SMTP |
-| `MQTT_USER` | ⚙️ | Todos los servicios Java | Usuario MQTT (default: `chessfraud`) |
-| `MQTT_PASSWORD` | ⚙️ | Todos los servicios Java | Contraseña MQTT |
 | `DB_HOST` | ⚙️ | User/Game Svc | Host de PostgreSQL (default: `postgres`) |
 | `DB_USER` | ⚙️ | User/Game Svc | Usuario de PostgreSQL (default: `postgres`) |
 | `ALLOWED_ORIGINS` | ⚙️ | Gateway | Orígenes permitidos para WS (default: `http://localhost:4200`) |
@@ -507,28 +546,6 @@ Copiar `.env.example` a `.env` y configurar:
 | `CHESS_INSIGHTS_URL` | ⚙️ | Analysis Service | URL del ML Service (default: `http://ml-service:5002/eval`) |
 
 ✅ = Obligatorio cambiar · ⚙️ = Tiene valor por defecto funcional
-
----
-
-## Variables de Entorno
-
-Ver [`.env.example`](anticheat-backend/.env.example) para la configuración completa.
-
-| Variable | Servicio | Obligatoria | Descripción |
-|----------|---------|-------------|-------------|
-| `JWT_SECRET` | Gateway | ✅ | Clave HMAC para firmar JWTs |
-| `DB_HOST` | User/Game | ✅ | Host PostgreSQL |
-| `DB_PASSWORD` | User/Game | ✅ | Password PostgreSQL |
-| `ML_SERVICE_TOKEN` | Analysis/ML | ✅ | Token compartido de autenticación |
-| `AUTH_TOKEN` | ML | ✅ | Bearer token para API ML |
-| `STOCKFISH_PATH` | ML | ✅ | Ruta al binario Stockfish |
-| `STOCKFISH_WORKERS` | ML | No | Número de workers Stockfish (default: 10) |
-| `SMTP_USER` | User | ✅ | Email para envío SMTP |
-| `SMTP_PASSWORD` | User | ✅ | Password SMTP |
-| `MQTT_USER` | Todos | ✅ | Usuario MQTT |
-| `MQTT_PASSWORD` | Todos | ✅ | Password MQTT |
-| `ALLOWED_ORIGINS` | Gateway | No | Orígenes WebSocket permitidos |
-| `AUTH_PORT` | Gateway | No | Puerto REST auth (default: 8081) |
 
 ---
 
