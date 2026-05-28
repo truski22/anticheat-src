@@ -220,14 +220,15 @@ class PayloadRegistryTest {
     }
 
     @Test
-    @DisplayName("Serialize ANALYZE_RESULT with evaluation arrays")
+    @DisplayName("Serialize ANALYZE_RESULT with per-color evaluation arrays")
     void serializeAnalyzeResult() {
         ChessMessage msg = new ChessMessage(MessageType.ANALYZE_RESULT,
-            new AnalyzeResultPayload(true, List.of(20, 15, -5), List.of(-10, 5, -20)));
+            new AnalyzeResultPayload(true, false, List.of(20, 15, -5), List.of(-10, 5, -20)));
         
         String json = PayloadRegistry.serialize(msg);
         assertTrue(json.contains("ANALYZE_RESULT"));
-        assertTrue(json.contains("true"));
+        assertTrue(json.contains("whiteLegal"));
+        assertTrue(json.contains("blackLegal"));
     }
 
     @Test
