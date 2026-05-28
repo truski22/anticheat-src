@@ -17,7 +17,7 @@ jobs:
           distribution: 'temurin'
           cache: maven
       - name: Build anticheat-backend-libs
-        run: mvn -f anticheat-backend-libs/pom.xml install -q -DskipTests
+        run: mvn -f anticheat-backend/anticheat-backend-libs/pom.xml install -q -DskipTests
       - name: Cache built libs
         uses: actions/cache@v4
         with:
@@ -40,7 +40,7 @@ jobs:
           path: ~/.m2/repository/com/chessfraud
           key: chessfraud-libs-${{ github.sha }}
       - name: Build gateway
-        run: mvn -f anticheat-backend-gateway/pom.xml package -DskipTests
+        run: mvn -f anticheat-backend/anticheat-backend-gateway/pom.xml package -DskipTests
 
   build-user-service:
     runs-on: ubuntu-latest
@@ -58,7 +58,7 @@ jobs:
           path: ~/.m2/repository/com/chessfraud
           key: chessfraud-libs-${{ github.sha }}
       - name: Build user-service
-        run: mvn -f anticheat-backend-user-service/pom.xml package -DskipTests
+        run: mvn -f anticheat-backend/anticheat-backend-user-service/pom.xml package -DskipTests
 
   build-game-service:
     runs-on: ubuntu-latest
@@ -76,7 +76,7 @@ jobs:
           path: ~/.m2/repository/com/chessfraud
           key: chessfraud-libs-${{ github.sha }}
       - name: Build game-service
-        run: mvn -f anticheat-backend-game-service/pom.xml package -DskipTests
+        run: mvn -f anticheat-backend/anticheat-backend-game-service/pom.xml package -DskipTests
 
   build-analysis-service:
     runs-on: ubuntu-latest
@@ -94,7 +94,7 @@ jobs:
           path: ~/.m2/repository/com/chessfraud
           key: chessfraud-libs-${{ github.sha }}
       - name: Build analysis-service
-        run: mvn -f anticheat-backend-analysis-service/pom.xml package -DskipTests
+        run: mvn -f anticheat-backend/anticheat-backend-analysis-service/pom.xml package -DskipTests
 
   test-shared:
     runs-on: ubuntu-latest
@@ -112,7 +112,7 @@ jobs:
           path: ~/.m2/repository/com/chessfraud
           key: chessfraud-libs-${{ github.sha }}
       - name: Run protocol tests
-        run: mvn -f anticheat-backend-libs/protocol/pom.xml test
+        run: mvn -f anticheat-backend/anticheat-backend-libs/protocol/pom.xml test
 
   test-ml-service:
     runs-on: ubuntu-latest
@@ -122,6 +122,6 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install dependencies
-        run: pip install -r anticheat-backend-ml-service/requirements.txt
+        run: pip install -r anticheat-backend/anticheat-backend-ml-service/requirements.txt
       - name: Run ML service tests
-        run: cd anticheat-backend-ml-service && python -m pytest -q
+        run: cd anticheat-backend/anticheat-backend-ml-service && python -m pytest -q
