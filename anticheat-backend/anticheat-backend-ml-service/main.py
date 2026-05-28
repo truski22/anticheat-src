@@ -148,12 +148,6 @@ def predict(request: PredictionRequest):
     return _analyze(request.moves)
 
 
-@app.post("/eval", response_model=PredictionResponse, dependencies=[Security(verify_token)])
-def evaluate(request: PredictionRequest):
-    """Analyze a chess game for fraud (legacy endpoint, same as /predict)."""
-    return _analyze(request.moves)
-
-
 @app.get("/model/info", response_model=ModelInfoResponse, dependencies=[Security(verify_token)])
 def model_info():
     """Return information about the currently loaded model."""

@@ -18,7 +18,7 @@ public class AnalysisServiceConfig {
      * Creates an {@code AnalysisServiceConfig} by reading the following environment variables:
      * <ul>
      *   <li>{@code CHESS_INSIGHTS_URL} – Full URL of the ML inference endpoint
-     *       (default: {@code http://localhost:5002/eval})</li>
+     *       (default: {@code http://localhost:5002/predict})</li>
      *   <li>{@code ML_SERVICE_TOKEN}   – Bearer token used to authenticate with the ML service</li>
      * </ul>
      *
@@ -26,7 +26,7 @@ public class AnalysisServiceConfig {
      * @throws IllegalStateException if {@code ML_SERVICE_TOKEN} is not set
      */
     public static AnalysisServiceConfig fromEnvironment() {
-        String url   = System.getenv().getOrDefault("CHESS_INSIGHTS_URL", "http://localhost:5002/eval");
+        String url   = System.getenv().getOrDefault("CHESS_INSIGHTS_URL", "http://localhost:5002/predict");
         String token = System.getenv("ML_SERVICE_TOKEN");
         if (token == null || token.isBlank()) {
             throw new IllegalStateException(
