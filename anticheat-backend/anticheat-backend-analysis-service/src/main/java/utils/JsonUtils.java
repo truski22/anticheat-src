@@ -28,6 +28,19 @@ public final class JsonUtils {
         return null;
     }
 
+    public static String extractNestedField(String message, String parent, String child) {
+        try {
+            JsonNode rootNode = MAPPER.readTree(message);
+            JsonNode parentNode = rootNode.get(parent);
+            if (parentNode != null && parentNode.has(child)) {
+                return parentNode.get(child).asText();
+            }
+        } catch (JsonProcessingException e) {
+            log.error("Failed to parse nested JSON property '{}.{}': {}", parent, child, e.getMessage(), e);
+        }
+        return null;
+    }
+
     public static boolean extractBooleanField(String message, String property) {
         try {
             JsonNode rootNode = MAPPER.readTree(message);

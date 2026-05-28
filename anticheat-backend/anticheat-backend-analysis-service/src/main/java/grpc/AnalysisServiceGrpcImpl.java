@@ -34,7 +34,8 @@ public class AnalysisServiceGrpcImpl extends AnalysisServiceGrpc.AnalysisService
             AnalysisResult result = analysisService.analyze(moves);
 
             AnalyzeGameResponse response = AnalyzeGameResponse.newBuilder()
-                    .setLegal(result.isLegal())
+                    .setWhiteLegal(result.isWhiteLegal())
+                    .setBlackLegal(result.isBlackLegal())
                     .addAllWhite(result.getDataWhite())
                     .addAllBlack(result.getDataBlack())
                     .build();

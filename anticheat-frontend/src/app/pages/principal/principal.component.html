@@ -25,9 +25,15 @@
     </div>
 
     <div class="result-section" *ngIf="analysisData">
-      <div class="result-badge" [class.legal]="analysisData.legal" [class.cheat]="!analysisData.legal">
-        <span class="result-icon">{{ analysisData.legal ? '✓' : '✗' }}</span>
-        <span class="result-label">{{ analysisData.legal ? 'LEGAL' : 'TRAMPA' }}</span>
+      <div class="result-badges">
+        <div class="result-badge" [class.legal]="analysisData.whiteLegal" [class.cheat]="!analysisData.whiteLegal">
+          <span class="result-icon">{{ analysisData.whiteLegal ? '✓' : '✗' }}</span>
+          <span class="result-label">Blancas: {{ analysisData.whiteLegal ? 'LEGAL' : 'TRAMPA' }}</span>
+        </div>
+        <div class="result-badge" [class.legal]="analysisData.blackLegal" [class.cheat]="!analysisData.blackLegal">
+          <span class="result-icon">{{ analysisData.blackLegal ? '✓' : '✗' }}</span>
+          <span class="result-label">Negras: {{ analysisData.blackLegal ? 'LEGAL' : 'TRAMPA' }}</span>
+        </div>
       </div>
 
       <div class="chart-card" *ngIf="analysisComplete">

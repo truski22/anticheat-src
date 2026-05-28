@@ -88,10 +88,11 @@ public class GameAnalysisService {
     }
 
     private AnalysisResult parseResponse(String body) {
-        boolean legal          = "0".equals(JsonUtils.extractField(body, "prediction"));
+        boolean whiteLegal     = "0".equals(JsonUtils.extractNestedField(body, "white", "prediction"));
+        boolean blackLegal     = "0".equals(JsonUtils.extractNestedField(body, "black", "prediction"));
         List<Integer> white    = JsonUtils.extractIntList(body, "data_white");
         List<Integer> black    = JsonUtils.extractIntList(body, "data_black");
-        return new AnalysisResult(legal, white, black);
+        return new AnalysisResult(whiteLegal, blackLegal, white, black);
     }
 
     private static String hashMoves(String moves) {
