@@ -15,7 +15,8 @@ message AnalyzeGameRequest {
 }
 
 message AnalyzeGameResponse {
-  bool legal = 1;
-  repeated int32 white = 2;
-  repeated int32 black = 3;
+  bool white_legal = 1;
+  bool black_legal = 2;
+  repeated int32 white = 3;
+  repeated int32 black = 4;
 }

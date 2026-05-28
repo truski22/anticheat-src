@@ -73,7 +73,8 @@ export interface GamesPayload {
 }
 
 export interface AnalyzeResultPayload {
-  legal: boolean;
+  whiteLegal: boolean;
+  blackLegal: boolean;
   white: number[];
   black: number[];
 }

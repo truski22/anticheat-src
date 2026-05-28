@@ -10,7 +10,8 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY main.py .
-COPY modelo_RandomForest_Top5_RF_Importances.joblib .
+COPY features/ ./features/
+COPY models/ ./models/
 
 ENV STOCKFISH_PATH=/usr/games/stockfish
 ENV AUTH_TOKEN=secreto123

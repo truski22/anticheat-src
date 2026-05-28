@@ -51,6 +51,13 @@
   margin-top: 32px;
 }
 
+.result-badges {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
 .result-badge {
   display: flex;
   align-items: center;

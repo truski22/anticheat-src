@@ -1,26 +1,48 @@
-import chess
-import chess.engine
-import chess.pgn
-import threading
-from queue import Queue, Empty
+import json
 import os
 import io
+from typing import List, Optional
+from contextlib import asynccontextmanager
+from datetime import datetime, timezone
+
 import joblib
 import numpy as np
-from scipy.stats import entropy, kurtosis, skew
-from scipy.signal import periodogram
-from typing import List
-from contextlib import asynccontextmanager
-
 from fastapi import FastAPI, HTTPException, Security
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 
-# ── Model & Configuration ─────────────────────────────────────────────
+from features.engine_analysis import EngineAnalysisPool
+from features.aggregation import aggregate_color_features, FEATURE_NAMES
 
-model = joblib.load("modelo_RandomForest_Top5_RF_Importances.joblib")
+# ── Configuration ──────────────────────────────────────────────────────
+
 STOCKFISH_PATH = os.getenv("STOCKFISH_PATH", "stockfish")
 AUTH_TOKEN = os.getenv("AUTH_TOKEN", "secreto123")
+STOCKFISH_WORKERS = int(os.getenv("STOCKFISH_WORKERS", "10"))
+STOCKFISH_DEPTH = 12
+MULTIPV_PROD = 3
+MODELS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models")
+FEEDBACK_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "feedback.jsonl")
+
+# ── Model Loading ──────────────────────────────────────────────────────
+
+def load_model(model_dir: str = None):
+    if model_dir is None:
+        model_dir = os.path.join(MODELS_DIR, "latest")
+    model_path = os.path.join(model_dir, "model.joblib")
+    meta_path = os.path.join(model_dir, "metadata.json")
+
+    loaded = joblib.load(model_path)
+
+    metadata = None
+    if os.path.exists(meta_path):
+        with open(meta_path, "r", encoding="utf-8") as f:
+            metadata = json.load(f)
+
+    return loaded, metadata
+
+
+model, model_metadata = load_model()
 
 # ── Auth ───────────────────────────────────────────────────────────────
 
@@ -31,208 +53,143 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Security(security))
         raise HTTPException(status_code=401, detail="Unauthorized")
     return credentials.credentials
 
-# ── Stockfish Pool (unchanged from Flask version) ──────────────────────
+# ── Engine Pool ────────────────────────────────────────────────────────
 
-class PersistentStockfishWorker(threading.Thread):
-    def __init__(self, engine_path, depth, task_queue, result_queue):
-        super().__init__()
-        self.engine_path = engine_path
-        self.depth = depth
-        self.task_queue = task_queue
-        self.result_queue = result_queue
-        self.daemon = True
-        self.engine = chess.engine.SimpleEngine.popen_uci(self.engine_path)
-
-    def run(self):
-        while True:
-            try:
-                task_id, fen, color = self.task_queue.get(timeout=3)
-                board = chess.Board(fen)
-                info = self.engine.analyse(board, chess.engine.Limit(depth=self.depth))
-                score = info["score"].pov(color)
-                value = score.score(mate_score=10000) if score.is_mate() else score.score()
-                self.result_queue.put((task_id, value))
-            except Empty:
-                continue
-            except Exception:
-                self.result_queue.put((task_id, 0))
-
-    def close(self):
-        self.engine.quit()
-
-
-class StockfishPool:
-    def __init__(self, max_workers=8, depth=12):
-        self.engine_path = STOCKFISH_PATH
-        self.depth = depth
-        self.task_queue = Queue()
-        self.result_queue = Queue()
-        self.workers = [
-            PersistentStockfishWorker(self.engine_path, self.depth, self.task_queue, self.result_queue)
-            for _ in range(max_workers)
-        ]
-        for w in self.workers:
-            w.start()
-
-    def evaluate_all(self, boards):
-        task_ids = []
-        for i, (board, color) in enumerate(boards):
-            fen = board.fen()
-            self.task_queue.put((i, fen, color))
-            task_ids.append(i)
-
-        results = {}
-        while len(results) < len(task_ids):
-            task_id, score = self.result_queue.get()
-            results[task_id] = score
-
-        return [results[i] for i in task_ids]
-
-    def shutdown(self):
-        for w in self.workers:
-            w.close()
-
-
-sf_pool = StockfishPool(max_workers=int(os.getenv("STOCKFISH_WORKERS", "10")), depth=12)
-
-# ── Game Processing (unchanged from Flask version) ─────────────────────
-
-def build_boards(moves):
-    boards = []
-    board = chess.Board()
-    for i, move in enumerate(moves):
-        try:
-            board.push_san(move)
-            color = chess.WHITE if i % 2 == 0 else chess.BLACK
-            boards.append((board.copy(), color))
-        except ValueError:
-            break
-    return boards
-
-
-def all_moves(pgn_string):
-    game = chess.pgn.read_game(io.StringIO(pgn_string))
-    moves = []
-    board = game.board()
-    for move in game.mainline_moves():
-        san = board.san(move)
-        moves.append(san)
-        board.push(move)
-    return moves
-
-
-def calculate_metric(movs):
-    movs = np.array(movs, dtype=np.float64)
-
-    result = {}
-    result["media_total"] = np.mean(movs)
-    result["mediana_total"] = np.median(movs)
-    result["varianza_total"] = np.var(movs)
-    result["curtosis_total"] = kurtosis(movs)
-    result["asimetria_total"] = skew(movs)
-    result["min_valor"] = np.min(movs)
-    result["max_valor"] = np.max(movs)
-    result["rango"] = result["max_valor"] - result["min_valor"]
-    result["iqr"] = np.percentile(movs, 75) - np.percentile(movs, 25)
-    result["cv"] = np.std(movs) / np.mean(movs) if np.mean(movs) != 0 else 0
-
-    for p in [25, 50, 75, 90]:
-        result[f"percentil_{p}"] = np.percentile(movs, p)
-
-    deltas = np.diff(movs)
-    result["deltas_promedio"] = np.mean(deltas) if len(deltas) else 0
-    result["variabilidad_entre_turnos"] = np.std(deltas) if len(deltas) else 0
-
-    hist, _ = np.histogram(movs, bins=30, density=True)
-    hist = hist[hist > 0]
-    result["entropia_evaluaciones"] = entropy(hist)
-
-    signos = np.sign(movs)
-    cambios_signo = np.sum(np.diff(signos) != 0)
-    result["inversiones_ventaja"] = cambios_signo
-
-    tercio = len(movs) // 3
-    if tercio > 0:
-        fases = [movs[:tercio], movs[tercio:2*tercio], movs[2*tercio:]]
-        for nombre, valores in zip(["inicio", "medio", "final"], fases):
-            result[f"media_{nombre}"] = np.mean(valores)
-    else:
-        result.update({"media_inicio": 0, "media_medio": 0, "media_final": 0})
-
-    if len(movs) > 1:
-        freqs, psd = periodogram(movs)
-        result["freq_dominante"] = freqs[np.argmax(psd)] if len(freqs) else 0
-        psd_sum = psd.sum()
-        result["entropia_espectral"] = entropy(psd / psd_sum) if psd_sum != 0 else 0
-    else:
-        result["freq_dominante"] = 0
-        result["entropia_espectral"] = 0
-
-    return {k: (v.item() if isinstance(v, np.generic) else v) for k, v in result.items()}
+analysis_pool = EngineAnalysisPool(
+    engine_path=STOCKFISH_PATH,
+    max_workers=STOCKFISH_WORKERS,
+    depth=STOCKFISH_DEPTH,
+    multipv=MULTIPV_PROD,
+)
 
 # ── Pydantic Models ────────────────────────────────────────────────────
 
 class PredictionRequest(BaseModel):
     moves: str = Field(..., description="PGN-format game moves", min_length=1)
 
+class ColorPrediction(BaseModel):
+    prediction: int = Field(..., description="0 = legit, 1 = cheat")
+    confidence: float = Field(..., description="Model confidence score")
+
 class PredictionResponse(BaseModel):
     data_white: List[int] = Field(..., description="White move evaluations (centipawns)")
     data_black: List[int] = Field(..., description="Black move evaluations (centipawns)")
-    prediction: int = Field(..., description="Classification: 0 = legal, 1 = cheated")
-    confidence: float = Field(..., description="Model confidence score")
+    white: ColorPrediction = Field(..., description="Prediction for white player")
+    black: ColorPrediction = Field(..., description="Prediction for black player")
+
+class FeedbackRequest(BaseModel):
+    game_id: str = Field(..., description="Unique game identifier")
+    cheat_color: Optional[str] = Field(None, description="'white', 'black', or null if legit")
+    notes: Optional[str] = Field(None, description="Optional notes")
+
+class ModelInfoResponse(BaseModel):
+    version: Optional[str] = None
+    algorithm: Optional[str] = None
+    trained_at: Optional[str] = None
+    features: Optional[List[str]] = None
+    metrics: Optional[dict] = None
 
 # ── App ────────────────────────────────────────────────────────────────
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     yield
-    sf_pool.shutdown()
+    analysis_pool.shutdown()
 
 app = FastAPI(
     title="Chess Fraud Detection — ML Service",
-    description="Analyzes chess games for potential fraud using Stockfish evaluation and ML classification.",
-    version="2.0.0",
+    description="Analyzes chess games for potential fraud using Stockfish evaluation and ML classification. "
+                "Classifies each color independently.",
+    version="3.0.0",
     lifespan=lifespan,
 )
 
-def _analyze(moves_pgn: str) -> dict:
-    """Core analysis logic shared by /eval and /predict endpoints."""
-    moves = all_moves(moves_pgn)
-    boards = build_boards(moves)
-    if not boards:
-        raise HTTPException(status_code=400, detail="No valid moves provided.")
 
-    results = sf_pool.evaluate_all(boards)
-    white = [r for (b, c), r in zip(boards, results) if c == chess.WHITE]
-    black = [r for (b, c), r in zip(boards, results) if c == chess.BLACK]
-
-    features = calculate_metric(results)
-    feature_order = model.feature_names_in_
-    input_vector = np.array([features.get(f, 0) for f in feature_order]).reshape(1, -1)
+def _predict_color(move_data: list) -> dict:
+    """Run feature extraction + model prediction for one color."""
+    features = aggregate_color_features(move_data)
+    input_vector = np.array([features.get(f, 0) for f in FEATURE_NAMES]).reshape(1, -1)
 
     prediction = model.predict(input_vector)[0]
     proba = model.predict_proba(input_vector)[0][prediction]
 
+    return {"prediction": int(prediction), "confidence": float(proba)}
+
+
+def _analyze(moves_pgn: str) -> dict:
+    """Core analysis: engine analysis → features → per-color predictions."""
+    analysis = analysis_pool.analyze_game(moves_pgn)
+
+    if not analysis["white"] and not analysis["black"]:
+        raise HTTPException(status_code=400, detail="No valid moves provided.")
+
+    white_evals = [m["eval_played"] for m in analysis["white"]]
+    black_evals = [m["eval_played"] for m in analysis["black"]]
+
+    white_pred = _predict_color(analysis["white"])
+    black_pred = _predict_color(analysis["black"])
+
     return {
-        "data_white": white,
-        "data_black": black,
-        "prediction": int(prediction),
-        "confidence": float(proba),
+        "data_white": white_evals,
+        "data_black": black_evals,
+        "white": white_pred,
+        "black": black_pred,
     }
+
 
 @app.get("/health")
 def health():
     return {"status": "ok"}
 
-@app.post("/eval", response_model=PredictionResponse, dependencies=[Security(verify_token)])
-def evaluate(request: PredictionRequest):
-    """Analyze a chess game for fraud (legacy endpoint)."""
-    return _analyze(request.moves)
 
 @app.post("/predict", response_model=PredictionResponse, dependencies=[Security(verify_token)])
 def predict(request: PredictionRequest):
-    """Analyze a chess game for fraud."""
+    """Analyze a chess game for fraud. Returns per-color predictions."""
     return _analyze(request.moves)
+
+
+@app.get("/model/info", response_model=ModelInfoResponse, dependencies=[Security(verify_token)])
+def model_info():
+    """Return information about the currently loaded model."""
+    if model_metadata:
+        return ModelInfoResponse(
+            version=model_metadata.get("version"),
+            algorithm=model_metadata.get("algorithm"),
+            trained_at=model_metadata.get("trained_at"),
+            features=model_metadata.get("features"),
+            metrics=model_metadata.get("metrics"),
+        )
+    return ModelInfoResponse()
+
+
+@app.post("/model/reload", dependencies=[Security(verify_token)])
+def reload_model():
+    """Hot-reload the model from models/latest/ without restarting."""
+    global model, model_metadata
+    try:
+        model, model_metadata = load_model()
+        version = model_metadata.get("version", "unknown") if model_metadata else "unknown"
+        return {"status": "reloaded", "version": version}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to reload model: {str(e)}")
+
+
+@app.post("/feedback", dependencies=[Security(verify_token)])
+def submit_feedback(request: FeedbackRequest):
+    """Submit feedback on a prediction to improve future models."""
+    entry = {
+        "game_id": request.game_id,
+        "cheat_color": request.cheat_color,
+        "notes": request.notes,
+        "submitted_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    os.makedirs(os.path.dirname(FEEDBACK_FILE), exist_ok=True)
+    with open(FEEDBACK_FILE, "a", encoding="utf-8") as f:
+        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+    return {"status": "recorded", "game_id": request.game_id}
+
 
 if __name__ == "__main__":
     import uvicorn

@@ -244,7 +244,7 @@ export class PrincipalComponent implements AfterViewChecked, OnDestroy {
 
     const savePayload: SaveGamePayload = {
       moves: this.gameMoves,
-      legal: this.analysisData.legal,
+      legal: this.analysisData.whiteLegal && this.analysisData.blackLegal,
     };
     this.wsService.send(MessageType.SAVE_GAME, savePayload);
   }

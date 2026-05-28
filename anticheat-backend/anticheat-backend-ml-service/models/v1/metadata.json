@@ -1,0 +1,10 @@
+{
+  "version": "v1",
+  "algorithm": "RandomForest",
+  "description": "Modelo original pre-entrenado con Top5 RF Importances. Sin metadata de entrenamiento disponible.",
+  "trained_at": "unknown",
+  "features": "Top5 RF Importances (legacy)",
+  "stockfish_depth": 12,
+  "multipv": 1,
+  "notes": "Modelo migrado desde modelo_RandomForest_Top5_RF_Importances.joblib. No hay métricas de evaluación registradas."
+}

@@ -105,7 +105,8 @@ public class GatewayMessageRouter {
                 AnalyzeGameResponse response = clients.analysisService().analyzeGame(
                     AnalyzeGameRequest.newBuilder().setUser(user).setMoves(payload.moves()).build());
                 AnalyzeResultPayload resultPayload = new AnalyzeResultPayload(
-                    response.getLegal(), response.getWhiteList(), response.getBlackList());
+                    response.getWhiteLegal(), response.getBlackLegal(),
+                    response.getWhiteList(), response.getBlackList());
                 webSocket.sendToUser(user, new ChessMessage(MessageType.ANALYZE_RESULT, resultPayload));
             }
             case SAVE_GAME -> {
