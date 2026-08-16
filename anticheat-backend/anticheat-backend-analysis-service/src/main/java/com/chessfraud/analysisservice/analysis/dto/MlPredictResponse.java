@@ -1,4 +1,4 @@
-package com.chessfraud.analysisservice.dto.ml;
+package com.chessfraud.analysisservice.analysis.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;

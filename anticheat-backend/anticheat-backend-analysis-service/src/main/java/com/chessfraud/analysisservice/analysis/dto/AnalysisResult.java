@@ -1,4 +1,4 @@
-package com.chessfraud.analysisservice.dto.analysis;
+package com.chessfraud.analysisservice.analysis.dto;
 
 import java.util.List;
 

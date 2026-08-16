@@ -1,4 +1,4 @@
-package com.chessfraud.analysisservice.dto.ml;
+package com.chessfraud.analysisservice.analysis.dto;
 
 /**
  * Outbound request body sent to ml-service. Serialized to JSON by {@link org.springframework.web.client.RestClient}

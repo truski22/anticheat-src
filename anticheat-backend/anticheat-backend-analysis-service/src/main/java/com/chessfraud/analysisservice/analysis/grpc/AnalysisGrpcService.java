@@ -1,7 +1,7 @@
-package com.chessfraud.analysisservice.grpc;
+package com.chessfraud.analysisservice.analysis.grpc;
 
-import com.chessfraud.analysisservice.dto.analysis.AnalysisResult;
-import com.chessfraud.analysisservice.service.analysis.GameAnalysisService;
+import com.chessfraud.analysisservice.analysis.dto.AnalysisResult;
+import com.chessfraud.analysisservice.analysis.service.GameAnalysisService;
 import com.chessfraud.grpc.analysis.AnalysisServiceGrpc;
 import com.chessfraud.grpc.analysis.AnalyzeGameRequest;
 import com.chessfraud.grpc.analysis.AnalyzeGameResponse;
@@ -14,7 +14,7 @@ import org.slf4j.LoggerFactory;
 /**
  * Implements the contract from anticheat-backend-libs/grpc-api/analysis_service.proto
  * (same default host/port "analysis-service:9092" expected by
- * anticheat-backend-gateway/grpc/ServiceClients.java).
+ * anticheat-backend-gateway's ServiceClients).
  */
 @GrpcService
 public class AnalysisGrpcService extends AnalysisServiceGrpc.AnalysisServiceImplBase {
