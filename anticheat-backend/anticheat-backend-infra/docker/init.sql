@@ -18,3 +18,8 @@ CREATE TABLE IF NOT EXISTS games (
     moves    TEXT         NOT NULL,
     legal    BOOLEAN      NOT NULL
 );
+
+-- Not a FOREIGN KEY: games are intentionally allowed to reference a username
+-- that doesn't exist in `users` (see GameGrpcServiceTest#saveGameForUnknownUserStillSucceeds).
+-- Plain index only, to speed up GameRepository.findByUsername.
+CREATE INDEX IF NOT EXISTS idx_games_username ON games(username);

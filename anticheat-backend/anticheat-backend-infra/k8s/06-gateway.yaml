@@ -42,6 +42,18 @@ spec:
                   name: app-config
                   key: ALLOWED_ORIGINS
                   optional: true
+            # Shared Redis cache: rate limiting and password-reset codes must be visible
+            # to every gateway replica, not just the pod that handled the request.
+            - name: REDIS_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: REDIS_HOST
+            - name: REDIS_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: REDIS_PORT
             # USER_SERVICE_HOST / GAME_SERVICE_HOST / ANALYSIS_SERVICE_HOST are left
             # unset: ServiceClients' defaults (user-service, game-service,
             # analysis-service) already match the Service DNS names these manifests

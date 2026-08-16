@@ -1,0 +1,69 @@
+# ──────────────────────────────────────────────
+# REDIS — shared cache for the gateway (rate limiting, password-reset codes)
+# ──────────────────────────────────────────────
+# Purely ephemeral cache: no PersistentVolume. Losing this data on restart
+# just means active rate-limit windows/reset codes reset early, which is
+# safe. This is what makes gateway.rate-limit and password-reset codes
+# work correctly across more than one gateway replica (previously they
+# lived in a per-pod ConcurrentHashMap and broke under HPA scaling).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: anticheat
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - containerPort: 6379
+
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - "redis-cli ping"
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - "redis-cli ping"
+            initialDelaySeconds: 15
+            periodSeconds: 20
+
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "100m"
+              memory: "128Mi"
+
+---
+# Service: exposes Redis internally as "redis:6379" for every pod in the
+# namespace, same pattern as mosquitto's Service used to (see git history).
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: anticheat
+spec:
+  selector:
+    app: redis
+  ports:
+    - port: 6379
+      targetPort: 6379
