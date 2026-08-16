@@ -1,8 +1,11 @@
 # ──────────────────────────────────────────────
-# USER-SERVICE — gestión de usuarios (solo MQTT + DB, sin puerto expuesto)
+# USER-SERVICE — user management (gRPC :9090 + health HTTP :9091)
 # ──────────────────────────────────────────────
-# Este servicio no expone ningún puerto: se comunica únicamente
-# a través de MQTT (salida) y PostgreSQL (salida). No necesita un Service.
+# Speaks gRPC again (same contract as anticheat-backend-libs/grpc-api/
+# user_service.proto) so as not to break anticheat-backend-gateway/grpc/ServiceClients.java,
+# which resolves the host "user-service" via Service DNS and dials port 9090.
+# That's why, unlike the previous version of this manifest, a Service IS
+# needed: without it, the Gateway can't resolve "user-service" inside the cluster.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -19,15 +22,6 @@ spec:
         app: user-service
     spec:
       initContainers:
-        - name: wait-for-mosquitto
-          image: busybox:1.36
-          command:
-            - sh
-            - -c
-            - |
-              until nc -z mosquitto 1883; do
-                echo "Esperando a mosquitto..."; sleep 2
-              done
         - name: wait-for-postgres
           image: busybox:1.36
           command:
@@ -35,9 +29,12 @@ spec:
             - -c
             - |
               until nc -z postgres 5432; do
-                echo "Esperando a postgres..."; sleep 2
+                echo "Waiting for postgres..."; sleep 2
               done
-              echo "PostgreSQL listo."
+              echo "PostgreSQL ready."
+        # (The "wait-for-mosquitto" init container from the previous version has
+        # been removed: there is no MQTT client in the user-service code, it was
+        # boilerplate copied from another service that only slowed down startup.)
 
       containers:
         - name: user-service
@@ -72,19 +69,25 @@ spec:
                   key: SMTP_PASSWORD
 
           ports:
+            - containerPort: 9090
+              name: grpc
             - containerPort: 9091
               name: health
 
+          # Correct port and path for the current Spring Boot app (previously
+          # pointed at /health on 9091, which was the JDK HttpServer that no
+          # longer exists; now it's Actuator with separate liveness/readiness
+          # probes — readiness includes the state of the Postgres connection).
           readinessProbe:
             httpGet:
-              path: /health
+              path: /actuator/health/readiness
               port: 9091
             initialDelaySeconds: 15
             periodSeconds: 10
 
           livenessProbe:
             httpGet:
-              path: /health
+              path: /actuator/health/liveness
               port: 9091
             initialDelaySeconds: 30
             periodSeconds: 20
@@ -96,3 +99,53 @@ spec:
             limits:
               cpu: "250m"
               memory: "512Mi"
+
+---
+# ClusterIP Service: gives the pod the DNS name "user-service" that
+# ServiceClients.java already uses by default (USER_SERVICE_HOST). It's not
+# headless because, unlike postgres, it doesn't matter here which specific
+# replica each call lands on.
+apiVersion: v1
+kind: Service
+metadata:
+  name: user-service
+  namespace: anticheat
+spec:
+  selector:
+    app: user-service
+  ports:
+    - name: grpc
+      port: 9090
+      targetPort: 9090
+    - name: health
+      port: 9091
+      targetPort: 9091
+
+---
+# NetworkPolicy: the gRPC channel (9090) is plaintext (ServiceClients.java uses
+# usePlaintext(), no token or mTLS) and the contract doesn't carry any caller
+# credential of its own — the only identity check now is the JWT the Gateway
+# requires before invoking ChangePassword (see AuthController.ChangePasswordHandler).
+# That protects the endpoint itself, but doesn't stop another pod in the cluster
+# from talking to user-service directly, bypassing the Gateway. What can be
+# locked down from this side is who can call at all: only the Gateway, by network.
+# Port 9091 (health) is left unrestricted so the kubelet can always run the probes.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: user-service-ingress
+  namespace: anticheat
+spec:
+  podSelector:
+    matchLabels:
+      app: user-service
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: gateway
+      ports:
+        - protocol: TCP
+          port: 9090
