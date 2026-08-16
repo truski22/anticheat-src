@@ -1,4 +1,4 @@
-package com.chessfraud.analysisservice.grpc;
+package com.chessfraud.analysisservice.analysis.grpc;
 
 import com.chessfraud.grpc.analysis.AnalysisServiceGrpc;
 import com.chessfraud.grpc.analysis.AnalyzeGameRequest;

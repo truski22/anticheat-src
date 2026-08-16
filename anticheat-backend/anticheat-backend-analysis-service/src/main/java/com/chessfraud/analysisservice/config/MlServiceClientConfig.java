@@ -7,7 +7,7 @@ import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
 /**
- * Builds the {@link RestClient} used by {@link com.chessfraud.analysisservice.service.analysis.GameAnalysisService}
+ * Builds the {@link RestClient} used by {@link com.chessfraud.analysisservice.analysis.service.GameAnalysisService}
  * to call ml-service. Same timeouts (5s connect / 10s read) as the original hand-rolled
  * {@code java.net.http.HttpClient} setup.
  */

@@ -1,9 +1,9 @@
-package com.chessfraud.analysisservice.service.analysis;
+package com.chessfraud.analysisservice.analysis.service;
 
+import com.chessfraud.analysisservice.analysis.dto.AnalysisResult;
+import com.chessfraud.analysisservice.analysis.dto.MlPredictRequest;
+import com.chessfraud.analysisservice.analysis.dto.MlPredictResponse;
 import com.chessfraud.analysisservice.config.AnalysisServiceConfig;
-import com.chessfraud.analysisservice.dto.analysis.AnalysisResult;
-import com.chessfraud.analysisservice.dto.ml.MlPredictRequest;
-import com.chessfraud.analysisservice.dto.ml.MlPredictResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
