@@ -1,0 +1,38 @@
+name: Build & test Java service
+
+# Reusable "child" workflow (GitHub Actions' equivalent of GitLab CI child
+# pipelines). One definition, called once per Java service from ci.yml with
+# a different module-path/display-name each time, instead of duplicating a
+# near-identical job four times.
+on:
+  workflow_call:
+    inputs:
+      module-path:
+        description: "Path to the Maven module to build, relative to the repo root"
+        required: true
+        type: string
+      display-name:
+        description: "Human-readable service name used in job/step labels"
+        required: true
+        type: string
+
+jobs:
+  build:
+    name: ${{ inputs.display-name }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+      - name: Restore built libs
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository/com/chessfraud
+          key: chessfraud-libs-${{ github.sha }}
+      - name: Run tests
+        run: mvn -f ${{ inputs.module-path }}/pom.xml test
+      - name: Package (tests already ran above, no need to repeat them)
+        run: mvn -f ${{ inputs.module-path }}/pom.xml package -DskipTests
