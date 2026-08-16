@@ -1,6 +1,10 @@
 # ──────────────────────────────────────────────
-# ANALYSIS-SERVICE — analysis orchestrator (MQTT + HTTP to ml-service)
+# ANALYSIS-SERVICE — analysis orchestrator (gRPC :9092 + health HTTP :9093, HTTP to ml-service)
 # ──────────────────────────────────────────────
+# Speaks gRPC (see anticheat-backend-libs/grpc-api/analysis_service.proto) so as not to
+# break anticheat-backend-gateway/grpc/ServiceClients.java, which resolves the host
+# "analysis-service" via Service DNS and dials port 9092. That's why a Service is needed
+# here: without it, the Gateway can't resolve "analysis-service" inside the cluster.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -17,15 +21,6 @@ spec:
         app: analysis-service
     spec:
       initContainers:
-        - name: wait-for-mosquitto
-          image: busybox:1.36
-          command:
-            - sh
-            - -c
-            - |
-              until nc -z mosquitto 1883; do
-                echo "Waiting for mosquitto..."; sleep 2
-              done
         - name: wait-for-ml-service
           image: busybox:1.36
           command:
@@ -53,32 +48,25 @@ spec:
                 secretKeyRef:
                   name: anticheat-secret
                   key: ML_SERVICE_TOKEN
-            - name: MQTT_BROKER_URL
-              valueFrom:
-                configMapKeyRef:
-                  name: app-config
-                  key: MQTT_BROKER_URL
-            - name: MQTT_USER
-              valueFrom:
-                secretKeyRef:
-                  name: anticheat-secret
-                  key: MQTT_USER
-            - name: MQTT_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: anticheat-secret
-                  key: MQTT_PASSWORD
 
+          ports:
+            - containerPort: 9092
+              name: grpc
+            - containerPort: 9093
+              name: health
+
+          # Actuator, same as user-service/game-service: separate liveness/readiness probes.
+          # No "db" component here (this service has no database), just readinessState/liveness.
           readinessProbe:
             httpGet:
-              path: /health
+              path: /actuator/health/readiness
               port: 9093
             initialDelaySeconds: 15
             periodSeconds: 10
 
           livenessProbe:
             httpGet:
-              path: /health
+              path: /actuator/health/liveness
               port: 9093
             initialDelaySeconds: 30
             periodSeconds: 20
@@ -90,3 +78,46 @@ spec:
             limits:
               cpu: "250m"
               memory: "512Mi"
+
+---
+# ClusterIP Service: gives the pod the DNS name "analysis-service" that
+# ServiceClients.java already uses by default (ANALYSIS_SERVICE_HOST).
+apiVersion: v1
+kind: Service
+metadata:
+  name: analysis-service
+  namespace: anticheat
+spec:
+  selector:
+    app: analysis-service
+  ports:
+    - name: grpc
+      port: 9092
+      targetPort: 9092
+    - name: health
+      port: 9093
+      targetPort: 9093
+
+---
+# NetworkPolicy: the gRPC channel (9092) is plaintext (ServiceClients.java uses
+# usePlaintext(), no token or mTLS) — restrict who can call at all to the Gateway, by
+# network. Port 9093 (health) is left unrestricted so the kubelet can always run the probes.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: analysis-service-ingress
+  namespace: anticheat
+spec:
+  podSelector:
+    matchLabels:
+      app: analysis-service
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: gateway
+      ports:
+        - protocol: TCP
+          port: 9092
