@@ -27,6 +27,10 @@
 /out-tsc
 /bazel-out
 
+# Platform-specific binaries (e.g. a locally downloaded Stockfish .exe) - the ml-service
+# Dockerfile installs Stockfish for Linux via apt, these should never be committed
+*.exe
+
 # Docker volumes
 postgres_data/
 

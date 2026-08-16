@@ -17,7 +17,14 @@ from features.aggregation import aggregate_color_features, FEATURE_NAMES
 # ── Configuration ──────────────────────────────────────────────────────
 
 STOCKFISH_PATH = os.getenv("STOCKFISH_PATH", "stockfish")
-AUTH_TOKEN = os.getenv("AUTH_TOKEN", "secreto123")
+
+try:
+    AUTH_TOKEN = os.environ["AUTH_TOKEN"]
+except KeyError:
+    raise RuntimeError(
+        "AUTH_TOKEN environment variable is required — refusing to start with no/default token."
+    )
+
 STOCKFISH_WORKERS = int(os.getenv("STOCKFISH_WORKERS", "10"))
 STOCKFISH_DEPTH = 12
 MULTIPV_PROD = 3
