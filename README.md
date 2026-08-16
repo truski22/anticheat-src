@@ -180,8 +180,7 @@ anticheat-src/
 │   ├── anticheat-backend-ml-service/       # FastAPI + Stockfish + RandomForest
 │   ├── anticheat-backend-libs/
 │   │   ├── protocol/                       # DTOs, ChessMessage, MessageType, PayloadRegistry
-│   │   ├── grpc-api/                       # Protobuf definitions (.proto) and generated stubs
-│   │   └── ws-lib/                         # WebSocket library (Tyrus 1.13)
+│   │   └── grpc-api/                       # Protobuf definitions (.proto) and generated stubs
 │   ├── anticheat-backend-infra/
 │   │   ├── docker/init.sql                 # PostgreSQL schema (users + games)
 │   │   └── k8s/                            # Kubernetes manifests
@@ -515,7 +514,7 @@ test-ml-service (independent, Python 3.11 + pytest)
 
 | Job | What it does |
 |-----|----------|
-| `build-libs` | Compiles `anticheat-backend-libs` (protocol, grpc-api, ws-lib) with Maven |
+| `build-libs` | Compiles `anticheat-backend-libs` (protocol, grpc-api) with Maven |
 | `build-gateway` | Compiles the gateway (`mvn package`) |
 | `build-user-service` | Compiles user-service |
 | `build-game-service` | Compiles game-service |
