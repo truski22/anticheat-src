@@ -10,22 +10,22 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public abstract class BaseWebSocket {
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(BaseWebSocket.class);
-    // Mapa para mantener las sesiones por tópico
+    // Map to keep sessions by topic
     private static Map<String, javax.websocket.Session> topicSessions = new ConcurrentHashMap<>();
 
     @OnOpen
     public void onOpen(javax.websocket.Session session, @PathParam("topic") String topic) {
         topicSessions.put(topic, session);
-        log.info("Nueva conexión en el tópico: {}", topic);
+        log.info("New connection on topic: {}", topic);
     }
     @OnClose
     public void onClose(@PathParam("topic") String topic, javax.websocket.Session session) {
         topicSessions.remove(topic);
-        log.info("Conexión cerrada para el tópico: {}", topic);
+        log.info("Connection closed for topic: {}", topic);
     }
     @OnError
     public void onError(Session session, Throwable throwable) {
-        log.error("Error en WebSocket: {}", throwable.getMessage());
+        log.error("WebSocket error: {}", throwable.getMessage());
     }
 
     public static void sendToTopic(String topic, String message) {

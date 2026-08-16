@@ -6,7 +6,7 @@ public class Main {
         Server server = new Server("localhost", 8080, "/", null, WebSocketServer.class );
         try {
             server.start();
-            log.info("Servidor conectado");
+            log.info("Server connected");
             System.in.read();
         } catch (Exception e) {
             log.error("Failed to start WebSocket server: {}", e.getMessage(), e);

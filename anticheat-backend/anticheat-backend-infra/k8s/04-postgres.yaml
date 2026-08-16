@@ -1,14 +1,14 @@
 # ──────────────────────────────────────────────
-# POSTGRESQL — base de datos (servicio con estado)
+# POSTGRESQL — database (stateful service)
 # ──────────────────────────────────────────────
 
-# PersistentVolumeClaim (PVC): solicita almacenamiento persistente al clúster.
-# Kubernetes busca un PersistentVolume (PV) disponible que satisfaga la
-# solicitud. El volumen sobrevive al reinicio/borrado del pod: los datos no
-# se pierden aunque PostgreSQL se reinicie.
+# PersistentVolumeClaim (PVC): requests persistent storage from the cluster.
+# Kubernetes looks for an available PersistentVolume (PV) that satisfies the
+# request. The volume survives pod restart/deletion: data is not
+# lost even if PostgreSQL restarts.
 #
-# En Minikube el PV se crea automáticamente (StorageClass "standard").
-# En producción usarías un StorageClass de tu cloud provider (EBS, GCP PD…).
+# In Minikube the PV is created automatically (StorageClass "standard").
+# In production you'd use a StorageClass from your cloud provider (EBS, GCP PD…).
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -16,25 +16,25 @@ metadata:
   namespace: anticheat
 spec:
   accessModes:
-    - ReadWriteOnce     # puede ser montado por un solo nodo a la vez (típico de BBDDs)
+    - ReadWriteOnce     # can be mounted by only one node at a time (typical for databases)
   resources:
     requests:
       storage: 1Gi
 
 ---
-# StatefulSet: como un Deployment pero para servicios con estado.
-# Garantiza:
-#   - Identidad de red estable: el pod siempre se llama "postgres-0"
-#   - Orden de arranque/parada: arrancan en orden 0,1,2... y paran al revés
-#   - Persistencia asociada: el PVC se mantiene aunque el pod se elimine
-# Es el recurso correcto para bases de datos.
+# StatefulSet: like a Deployment but for stateful services.
+# Guarantees:
+#   - Stable network identity: the pod is always called "postgres-0"
+#   - Startup/shutdown order: they start in order 0,1,2... and stop in reverse
+#   - Associated persistence: the PVC is kept even if the pod is deleted
+# It's the right resource for databases.
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: postgres
   namespace: anticheat
 spec:
-  serviceName: "postgres"    # nombre del Service headless que gobierna el StatefulSet
+  serviceName: "postgres"    # name of the headless Service that governs the StatefulSet
   replicas: 1
   selector:
     matchLabels:
@@ -93,9 +93,9 @@ spec:
 
           volumeMounts:
             - name: postgres-data
-              mountPath: /var/lib/postgresql/data    # datos persistentes de PostgreSQL
+              mountPath: /var/lib/postgresql/data    # PostgreSQL persistent data
             - name: postgres-init
-              mountPath: /docker-entrypoint-initdb.d  # scripts ejecutados en primer arranque
+              mountPath: /docker-entrypoint-initdb.d  # scripts run on first startup
 
       volumes:
         - name: postgres-data
@@ -106,11 +106,11 @@ spec:
             name: postgres-init-config
 
 ---
-# Service Headless (clusterIP: None): no tiene IP virtual propia.
-# El DNS devuelve directamente la IP del pod (postgres-0.postgres.anticheat…).
-# Es obligatorio para StatefulSets: permite que cada pod tenga
-# un nombre DNS estable e individual.
-# Las aplicaciones usan "postgres" como hostname y resuelven al pod correcto.
+# Headless Service (clusterIP: None): has no virtual IP of its own.
+# DNS returns the pod's IP directly (postgres-0.postgres.anticheat…).
+# It's mandatory for StatefulSets: it lets each pod have
+# a stable, individual DNS name.
+# Applications use "postgres" as the hostname and resolve to the correct pod.
 apiVersion: v1
 kind: Service
 metadata:

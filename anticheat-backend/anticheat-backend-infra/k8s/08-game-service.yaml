@@ -1,5 +1,5 @@
 # ──────────────────────────────────────────────
-# GAME-SERVICE — gestión de partidas (solo MQTT + DB, sin puerto expuesto)
+# GAME-SERVICE — game management (MQTT + DB only, no exposed port)
 # ──────────────────────────────────────────────
 apiVersion: apps/v1
 kind: Deployment
@@ -24,7 +24,7 @@ spec:
             - -c
             - |
               until nc -z mosquitto 1883; do
-                echo "Esperando a mosquitto..."; sleep 2
+                echo "Waiting for mosquitto..."; sleep 2
               done
         - name: wait-for-postgres
           image: busybox:1.36
@@ -33,7 +33,7 @@ spec:
             - -c
             - |
               until nc -z postgres 5432; do
-                echo "Esperando a postgres..."; sleep 2
+                echo "Waiting for postgres..."; sleep 2
               done
 
       containers:
