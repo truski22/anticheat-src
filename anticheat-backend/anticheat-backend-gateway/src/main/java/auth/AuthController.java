@@ -1,7 +1,10 @@
 package auth;
 
+import com.auth0.jwt.exceptions.JWTVerificationException;
 import com.chessfraud.grpc.user.ChangePasswordByEmailRequest;
 import com.chessfraud.grpc.user.ChangePasswordByEmailResponse;
+import com.chessfraud.grpc.user.ChangePasswordRequest;
+import com.chessfraud.grpc.user.ChangePasswordResponse;
 import com.chessfraud.grpc.user.LoginRequest;
 import com.chessfraud.grpc.user.LoginResponse;
 import com.chessfraud.grpc.user.RegisterRequest;
@@ -24,7 +27,10 @@ import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -45,6 +51,7 @@ public class AuthController {
     private final HttpServer httpServer;
     private final ScheduledExecutorService cleaner;
     private final Map<String, ResetCode> pendingResetCodes = new ConcurrentHashMap<>();
+    private final Set<String> allowedOrigins;
 
     private record ResetCode(String code, Instant expiresAt) {
         boolean isValid(String inputCode) {
@@ -52,9 +59,24 @@ public class AuthController {
         }
     }
 
+    /** Missing, malformed, or invalid/expired JWT on a route that requires one. */
+    private static class AuthenticationException extends RuntimeException {
+        AuthenticationException(String message) {
+            super(message);
+        }
+    }
+
     public AuthController(ServiceClients clients, JwtService jwtService) throws IOException {
         this.clients = clients;
         this.jwtService = jwtService;
+        Set<String> origins = new HashSet<>();
+        for (String origin : System.getenv().getOrDefault("ALLOWED_ORIGINS", "http://localhost:4200").split(",")) {
+            String trimmed = origin.trim();
+            if (!trimmed.isBlank()) {
+                origins.add(trimmed);
+            }
+        }
+        this.allowedOrigins = Collections.unmodifiableSet(origins);
 
         int port = Integer.parseInt(System.getenv().getOrDefault("AUTH_PORT", "8081"));
         this.httpServer = HttpServer.create(new InetSocketAddress("0.0.0.0", port), 0);
@@ -64,6 +86,7 @@ public class AuthController {
         httpServer.createContext("/auth/register", new RegisterHandler());
         httpServer.createContext("/auth/forgot-password", new ForgotPasswordHandler());
         httpServer.createContext("/auth/reset-password", new ResetPasswordHandler());
+        httpServer.createContext("/auth/change-password", new ChangePasswordHandler());
         httpServer.createContext("/health", exchange -> sendJson(exchange, 200, "{\"status\":\"ok\"}"));
 
         this.cleaner = Executors.newSingleThreadScheduledExecutor(r -> {
@@ -253,6 +276,76 @@ public class AuthController {
         }
     }
 
+    /**
+     * Password change for an already-authenticated user. Unlike
+     * /auth/reset-password (which proves email ownership with a code),
+     * here proof of ownership is the JWT: the username that ChangePassword
+     * is called with ALWAYS comes from the validated token, never from a
+     * "user" field in the body. Without this, anyone who knew another
+     * account's name could change its password without proving they own
+     * it — the user-service .proto doesn't carry caller identity, so this
+     * check has to live here.
+     */
+    private class ChangePasswordHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            addCorsHeaders(exchange);
+            if (handlePreflight(exchange) || !requirePost(exchange)) {
+                return;
+            }
+
+            try {
+                String authenticatedUser = requireAuthenticatedUser(exchange);
+
+                JsonNode body = readBody(exchange);
+                String newPassword = requireField(body, "password");
+                validatePassword(newPassword);
+
+                ChangePasswordResponse response = clients.userService().changePassword(
+                    ChangePasswordRequest.newBuilder()
+                        .setUser(authenticatedUser)
+                        .setPassword(newPassword)
+                        .build());
+
+                if (response.getSuccess()) {
+                    sendJson(exchange, 200, "{\"success\":true,\"message\":\"Password updated\"}");
+                } else {
+                    sendJson(exchange, 409, errorJson("New password must be different from the current one"));
+                }
+            } catch (AuthenticationException e) {
+                sendJson(exchange, 401, errorJson(e.getMessage()));
+            } catch (IllegalArgumentException e) {
+                sendJson(exchange, 400, errorJson(e.getMessage()));
+            } catch (StatusRuntimeException e) {
+                sendGrpcError(exchange, e, 500, "Password update failed");
+            } catch (Exception e) {
+                log.error("[AUTH] Change-password failed: {}", e.getMessage(), e);
+                sendJson(exchange, 500, errorJson("Internal server error"));
+            }
+        }
+    }
+
+    /**
+     * Extracts and validates the JWT from the {@code Authorization: Bearer <token>}
+     * header, returning the username (subject) that signed the token. Trusts
+     * nothing from the request body to identify the caller.
+     */
+    private String requireAuthenticatedUser(HttpExchange exchange) {
+        String header = exchange.getRequestHeaders().getFirst("Authorization");
+        if (header == null || !header.startsWith("Bearer ")) {
+            throw new AuthenticationException("Missing or malformed Authorization header");
+        }
+        String token = header.substring("Bearer ".length()).trim();
+        if (token.isBlank()) {
+            throw new AuthenticationException("Missing or malformed Authorization header");
+        }
+        try {
+            return jwtService.validateToken(token);
+        } catch (JWTVerificationException e) {
+            throw new AuthenticationException("Invalid or expired token");
+        }
+    }
+
     private JsonNode readBody(HttpExchange exchange) throws IOException {
         try (InputStream inputStream = exchange.getRequestBody()) {
             byte[] bytes = inputStream.readNBytes(MAX_BODY_SIZE);
@@ -288,7 +381,11 @@ public class AuthController {
     }
 
     private void addCorsHeaders(HttpExchange exchange) {
-        exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
+        String origin = exchange.getRequestHeaders().getFirst("Origin");
+        if (origin != null && allowedOrigins.contains(origin)) {
+            exchange.getResponseHeaders().set("Access-Control-Allow-Origin", origin);
+            exchange.getResponseHeaders().set("Vary", "Origin");
+        }
         exchange.getResponseHeaders().set("Access-Control-Allow-Methods", "POST, OPTIONS");
         exchange.getResponseHeaders().set("Access-Control-Allow-Headers", "Content-Type, Authorization");
     }
