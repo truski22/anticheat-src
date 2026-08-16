@@ -1,9 +1,9 @@
-package com.chessfraud.gameservice.service.game;
+package com.chessfraud.gameservice.game.service;
 
-import com.chessfraud.gameservice.dto.game.GamesResult;
-import com.chessfraud.gameservice.dto.game.SaveGameResult;
-import com.chessfraud.gameservice.model.game.Game;
-import com.chessfraud.gameservice.repository.game.GameRepository;
+import com.chessfraud.gameservice.game.dto.GamesResult;
+import com.chessfraud.gameservice.game.dto.SaveGameResult;
+import com.chessfraud.gameservice.game.model.Game;
+import com.chessfraud.gameservice.game.repository.GameRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;

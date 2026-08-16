@@ -1,4 +1,4 @@
-package com.chessfraud.gameservice.dto.game;
+package com.chessfraud.gameservice.game.dto;
 
 /**
  * Represents the outcome of a save-game operation.
