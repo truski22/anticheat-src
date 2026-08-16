@@ -1,9 +1,9 @@
-package com.chessfraud.userservice.service.user;
+package com.chessfraud.userservice.user.service;
 
-import com.chessfraud.userservice.dto.user.RegisterOutcome;
-import com.chessfraud.userservice.dto.user.RegisterResult;
-import com.chessfraud.userservice.model.user.User;
-import com.chessfraud.userservice.repository.user.UserRepository;
+import com.chessfraud.userservice.user.dto.RegisterOutcome;
+import com.chessfraud.userservice.user.dto.RegisterResult;
+import com.chessfraud.userservice.user.model.User;
+import com.chessfraud.userservice.user.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;

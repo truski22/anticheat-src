@@ -1,4 +1,4 @@
-package com.chessfraud.userservice.dto.user;
+package com.chessfraud.userservice.user.dto;
 
 public enum LoginOutcome {
     OK,

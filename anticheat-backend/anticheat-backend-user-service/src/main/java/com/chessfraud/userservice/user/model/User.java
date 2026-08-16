@@ -1,4 +1,4 @@
-package com.chessfraud.userservice.model.user;
+package com.chessfraud.userservice.user.model;
 
 import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.PersistenceCreator;
