@@ -4,51 +4,45 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.chessfraud</groupId>
+    <parent>
+        <groupId>com.chessfraud</groupId>
+        <artifactId>chessfraud-libs</artifactId>
+        <version>1.0-SNAPSHOT</version>
+    </parent>
+
     <artifactId>protocol</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <packaging>jar</packaging>
+    <name>Chessfraud Protocol</name>
+    <description>
+        Framework-agnostic wire protocol for client/gateway messaging: the ChessMessage
+        envelope, MessageType catalog, typed payload records, and the hardened
+        PayloadRegistry (de)serializer. No transitive runtime dependencies beyond
+        Jackson and the SLF4J API, so it is safe to embed in any consumer regardless
+        of application framework (raw WebSocket handler today, Spring MVC/WebSocket
+        controller tomorrow).
+    </description>
+
     <dependencies>
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
-            <version>2.15.0</version>
-            <scope>compile</scope>
-        </dependency>
-        <dependency>
-            <groupId>com.zaxxer</groupId>
-            <artifactId>HikariCP</artifactId>
-            <version>5.1.0</version>
-        </dependency>
-        <dependency>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter</artifactId>
-            <version>5.10.2</version>
-            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
-            <version>2.0.12</version>
         </dependency>
+
+        <!-- Test-only: a concrete SLF4J binding so test output is visible.
+             Consumers supply their own binding; this module never forces one. -->
         <dependency>
             <groupId>ch.qos.logback</groupId>
             <artifactId>logback-classic</artifactId>
-            <version>1.5.3</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
         </dependency>
     </dependencies>
-    <build>
-        <plugins>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-surefire-plugin</artifactId>
-                <version>3.2.3</version>
-            </plugin>
-        </plugins>
-    </build>
-    <properties>
-        <maven.compiler.source>21</maven.compiler.source>
-        <maven.compiler.target>21</maven.compiler.target>
-    </properties>
-
-
 </project>

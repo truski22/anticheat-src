@@ -4,10 +4,30 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.chessfraud</groupId>
+    <parent>
+        <groupId>com.chessfraud</groupId>
+        <artifactId>chessfraud-libs</artifactId>
+        <version>1.0-SNAPSHOT</version>
+    </parent>
+
     <artifactId>ws-lib</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <packaging>jar</packaging>
+    <name>Chessfraud WebSocket Bootstrap (legacy)</name>
+    <description>
+        DEPRECATED / TRANSITIONAL: standalone Tyrus WebSocket server bootstrap used by the
+        gateway's current javax.websocket endpoint. To be retired once the gateway migrates
+        onto spring-boot-starter-websocket, at which point this whole module should be
+        deleted rather than refactored further. See the module README before adding
+        anything new here.
+
+        The javax.websocket-api / tyrus 1.13 dependencies below are intentionally kept
+        alongside the newer jakarta.websocket-api 2.1.1 line: the gateway's endpoint code
+        still compiles against the javax namespace, and downgrading or removing either
+        line without also migrating that code will break the gateway build.
+    </description>
+
     <dependencies>
+        <!-- Jakarta WebSocket API (server-side annotations: @ServerEndpoint, @OnMessage, ...) -->
         <dependency>
             <groupId>jakarta.websocket</groupId>
             <artifactId>jakarta.websocket-api</artifactId>
@@ -18,31 +38,13 @@
             <artifactId>tyrus-server</artifactId>
             <version>2.1.1</version>
         </dependency>
-        <dependency>
-            <groupId>jakarta.json.bind</groupId>
-            <artifactId>jakarta.json.bind-api</artifactId>
-            <version>2.0.0</version>
-        </dependency>
 
-        <!-- Jakarta JSON-P (JSON Processing) -->
+        <!-- Legacy javax.websocket line: still required by the gateway's endpoint code today. -->
         <dependency>
-            <groupId>jakarta.json</groupId>
-            <artifactId>jakarta.json-api</artifactId>
-            <version>2.0.0</version>
-        </dependency>
-
-        <!-- JSON-B Implementation (e.g., Eclipse Yasson) -->
-        <dependency>
-            <groupId>org.eclipse</groupId>
-            <artifactId>yasson</artifactId>
-            <version>2.0.3</version>
-        </dependency>
-
-        <!-- JSON-P Implementation -->
-        <dependency>
-            <groupId>org.glassfish</groupId>
-            <artifactId>jakarta.json</artifactId>
-            <version>2.0.1</version>
+            <groupId>javax.websocket</groupId>
+            <artifactId>javax.websocket-api</artifactId>
+            <version>1.1</version>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.glassfish.tyrus.bundles</groupId>
@@ -54,42 +56,23 @@
             <artifactId>tyrus-container-grizzly-client</artifactId>
             <version>1.13</version>
         </dependency>
-
-        <!-- Servlet API if needed -->
-        <dependency>
-            <groupId>jakarta.servlet</groupId>
-            <artifactId>jakarta.servlet-api</artifactId>
-            <version>5.0.0</version>
-            <scope>provided</scope>
-        </dependency>
-        <dependency>
-            <groupId>javax.websocket</groupId>
-            <artifactId>javax.websocket-api</artifactId>
-            <version>1.1</version>
-            <scope>provided</scope>
-        </dependency>
-
-        <!-- Dependencia de Grizzly necesaria para el contenedor -->
-
         <dependency>
             <groupId>org.glassfish.tyrus</groupId>
             <artifactId>tyrus-server</artifactId>
             <version>1.13</version>
         </dependency>
-
         <dependency>
             <groupId>org.glassfish.tyrus</groupId>
             <artifactId>tyrus-container-grizzly-server</artifactId>
             <version>1.13</version>
         </dependency>
-
         <dependency>
             <groupId>org.glassfish.tyrus</groupId>
             <artifactId>tyrus-core</artifactId>
             <version>1.13</version>
         </dependency>
 
-        <!-- Servlet API if needed -->
+        <!-- Servlet API required by the Tyrus/Grizzly container at compile time -->
         <dependency>
             <groupId>jakarta.servlet</groupId>
             <artifactId>jakarta.servlet-api</artifactId>
@@ -97,31 +80,22 @@
             <scope>provided</scope>
         </dependency>
         <dependency>
-            <groupId>javax.websocket</groupId>
-            <artifactId>javax.websocket-api</artifactId>
-            <version>1.1</version>
-            <scope>provided</scope>
-        </dependency>
-        <dependency>
             <groupId>org.apache.tomcat</groupId>
             <artifactId>tomcat-websocket-client-api</artifactId>
             <version>10.1.0</version>
-            <scope>compile</scope>
         </dependency>
+
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
-            <version>2.0.12</version>
         </dependency>
+
+        <!-- Test-only: a concrete SLF4J binding so test output is visible.
+             Consumers supply their own binding; this module never forces one. -->
         <dependency>
             <groupId>ch.qos.logback</groupId>
             <artifactId>logback-classic</artifactId>
-            <version>1.5.3</version>
+            <scope>test</scope>
         </dependency>
     </dependencies>
-    <properties>
-        <maven.compiler.source>21</maven.compiler.source>
-        <maven.compiler.target>21</maven.compiler.target>
-    </properties>
-
 </project>

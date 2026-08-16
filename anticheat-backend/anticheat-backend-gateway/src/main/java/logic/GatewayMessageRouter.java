@@ -15,16 +15,16 @@ import com.chessfraud.grpc.user.UserInfoResponse;
 import grpc.ServiceClients;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
-import protocol.ChessMessage;
-import protocol.MessageType;
-import protocol.payload.AnalyzeGamePayload;
-import protocol.payload.AnalyzeResultPayload;
-import protocol.payload.ChangePasswordPayload;
-import protocol.payload.GamesPayload;
-import protocol.payload.ResponsePayload;
-import protocol.payload.SaveGamePayload;
-import protocol.payload.UserInfoPayload;
-import websocket.ServerSocket;
+import com.chessfraud.protocol.ChessMessage;
+import com.chessfraud.protocol.MessageType;
+import com.chessfraud.protocol.payload.AnalyzeGamePayload;
+import com.chessfraud.protocol.payload.AnalyzeResultPayload;
+import com.chessfraud.protocol.payload.ChangePasswordPayload;
+import com.chessfraud.protocol.payload.GamesPayload;
+import com.chessfraud.protocol.payload.ResponsePayload;
+import com.chessfraud.protocol.payload.SaveGamePayload;
+import com.chessfraud.protocol.payload.UserInfoPayload;
+import com.chessfraud.ws.WebSocketServerBootstrap;
 import websocket.WebSocket;
 
 import java.io.IOException;
@@ -36,7 +36,7 @@ public class GatewayMessageRouter {
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(GatewayMessageRouter.class);
 
     private final ServiceClients clients;
-    private final ServerSocket serverSocket;
+    private final WebSocketServerBootstrap serverSocket;
     private final WebSocket webSocket;
     private final AuthController authController;
     private final JwtService jwtService;
@@ -56,7 +56,7 @@ public class GatewayMessageRouter {
         webSocket = new WebSocket();
         WebSocket.setLogic(this);
         WebSocket.setJwtService(jwtService);
-        serverSocket = new ServerSocket("0.0.0.0", 8080, "/", null, WebSocket.class);
+        serverSocket = new WebSocketServerBootstrap("0.0.0.0", 8080, "/", null, WebSocket.class);
         serverSocket.start();
         executor = Executors.newVirtualThreadPerTaskExecutor();
     }
