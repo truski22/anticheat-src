@@ -14,7 +14,8 @@ COPY features/ ./features/
 COPY models/ ./models/
 
 ENV STOCKFISH_PATH=/usr/games/stockfish
-ENV AUTH_TOKEN=secreto123
+# AUTH_TOKEN must be provided at runtime (docker run -e / k8s Secret) — the app refuses to
+# start without it, so no default is baked into the image.
 
 EXPOSE 5002
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "5002"]

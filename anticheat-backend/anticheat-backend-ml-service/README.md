@@ -99,7 +99,7 @@ python -m training.evaluate
 | Variable | Description |
 |----------|-------------|
 | `STOCKFISH_PATH` | Path to the Stockfish binary |
-| `AUTH_TOKEN` | Authentication token for API access |
+| `AUTH_TOKEN` | Authentication token for API access (required — the service refuses to start without it) |
 | `MODEL_DIR` | Model directory (default: `models/latest`) |
 
 ## Requirements
