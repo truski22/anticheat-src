@@ -1,6 +1,11 @@
 # ──────────────────────────────────────────────
-# GATEWAY — WebSocket gateway exposed externally
+# GATEWAY — WebSocket + REST gateway exposed externally
 # ──────────────────────────────────────────────
+# Speaks gRPC to user-service/game-service/analysis-service (see
+# anticheat-backend-gateway/src/main/java/com/chessfraud/gateway/grpc/ServiceClients.java).
+# There is no MQTT broker in this system; the previous version of this manifest carried a
+# "wait-for-mosquitto" init container and MQTT_* env vars left over from an earlier
+# architecture that the gateway code no longer uses.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -16,24 +21,6 @@ spec:
       labels:
         app: gateway
     spec:
-      # initContainers: containers that run and COMPLETE before the main
-      # container starts. They're how Kubernetes manages startup
-      # dependencies (equivalent to depends_on in Docker Compose).
-      # If an initContainer fails, Kubernetes retries it until it succeeds.
-      initContainers:
-        - name: wait-for-mosquitto
-          image: busybox:1.36
-          # nc -z: tries to connect to host:port without sending data.
-          # The loop waits until the MQTT broker accepts connections.
-          command:
-            - sh
-            - -c
-            - |
-              until nc -z mosquitto 1883; do
-                echo "Waiting for mosquitto..."; sleep 2
-              done
-              echo "Mosquitto ready."
-
       containers:
         - name: gateway
           image: anticheat/gateway:latest
@@ -55,32 +42,25 @@ spec:
                   name: app-config
                   key: ALLOWED_ORIGINS
                   optional: true
-            - name: MQTT_BROKER_URL
-              valueFrom:
-                configMapKeyRef:
-                  name: app-config
-                  key: MQTT_BROKER_URL
-            - name: MQTT_USER
-              valueFrom:
-                secretKeyRef:
-                  name: anticheat-secret
-                  key: MQTT_USER
-            - name: MQTT_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: anticheat-secret
-                  key: MQTT_PASSWORD
+            # USER_SERVICE_HOST / GAME_SERVICE_HOST / ANALYSIS_SERVICE_HOST are left
+            # unset: ServiceClients' defaults (user-service, game-service,
+            # analysis-service) already match the Service DNS names these manifests
+            # create, same as user-service/game-service/analysis-service's own
+            # *_HOST defaults matching "postgres".
 
+          # Correct port and path for the current Spring Boot app (previously pointed at
+          # /health on 8081, which was the JDK HttpServer that no longer exists; now it's
+          # Actuator with separate liveness/readiness probes, same as the other services).
           readinessProbe:
             httpGet:
-              path: /health
+              path: /actuator/health/readiness
               port: 8081
             initialDelaySeconds: 15
             periodSeconds: 10
 
           livenessProbe:
             httpGet:
-              path: /health
+              path: /actuator/health/liveness
               port: 8081
             initialDelaySeconds: 30
             periodSeconds: 20
