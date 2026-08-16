@@ -1,9 +1,9 @@
-package com.chessfraud.gameservice.grpc;
+package com.chessfraud.gameservice.game.grpc;
 
-import com.chessfraud.gameservice.dto.game.GamesResult;
-import com.chessfraud.gameservice.dto.game.SaveGameResult;
-import com.chessfraud.gameservice.model.game.Game;
-import com.chessfraud.gameservice.service.game.GamePersistenceService;
+import com.chessfraud.gameservice.game.dto.GamesResult;
+import com.chessfraud.gameservice.game.dto.SaveGameResult;
+import com.chessfraud.gameservice.game.model.Game;
+import com.chessfraud.gameservice.game.service.GamePersistenceService;
 import com.chessfraud.grpc.game.GameRecord;
 import com.chessfraud.grpc.game.GameServiceGrpc;
 import com.chessfraud.grpc.game.GetGamesRequest;
@@ -16,7 +16,7 @@ import net.devh.boot.grpc.server.service.GrpcService;
 /**
  * Implements the contract from anticheat-backend-libs/grpc-api/game_service.proto
  * (same default host/port "game-service:9091" expected by
- * anticheat-backend-gateway/grpc/ServiceClients.java).
+ * anticheat-backend-gateway's ServiceClients).
  */
 @GrpcService
 public class GameGrpcService extends GameServiceGrpc.GameServiceImplBase {

@@ -1,6 +1,6 @@
-package com.chessfraud.gameservice.dto.game;
+package com.chessfraud.gameservice.game.dto;
 
-import com.chessfraud.gameservice.model.game.Game;
+import com.chessfraud.gameservice.game.model.Game;
 
 import java.util.List;
 

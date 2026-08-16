@@ -1,4 +1,4 @@
-package com.chessfraud.gameservice.grpc;
+package com.chessfraud.gameservice.game.grpc;
 
 import com.chessfraud.grpc.game.GameRecord;
 import com.chessfraud.grpc.game.GameServiceGrpc;

@@ -1,6 +1,6 @@
-package com.chessfraud.gameservice.repository.game;
+package com.chessfraud.gameservice.game.repository;
 
-import com.chessfraud.gameservice.model.game.Game;
+import com.chessfraud.gameservice.game.model.Game;
 import org.springframework.data.repository.CrudRepository;
 
 import java.util.List;
