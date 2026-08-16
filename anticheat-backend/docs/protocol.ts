@@ -26,6 +26,7 @@ export enum MessageType {
     GAMES = 'GAMES',
     ANALYZE_RESULT = 'ANALYZE_RESULT',
     SAVE_GAME_RESPONSE = 'SAVE_GAME_RESPONSE',
+    CHANGE_PASSWORD_RESPONSE = 'CHANGE_PASSWORD_RESPONSE',
     CHANGE_PASSWORD_EMAIL_RESPONSE = 'CHANGE_PASSWORD_EMAIL_RESPONSE',
 
     // Future game types
@@ -148,6 +149,7 @@ export type UserInfoMessage = ChessMessage<UserInfoPayload>;
 export type GamesMessage = ChessMessage<GamesPayload>;
 export type AnalyzeResultMessage = ChessMessage<AnalyzeResultPayload>;
 export type SaveGameResponseMessage = ChessMessage<ResponsePayload>;
+export type ChangePasswordResponseMessage = ChessMessage<ResponsePayload>;
 export type ChangePasswordEmailResponseMessage = ChessMessage<ChangePasswordEmailResponsePayload>;
 export type ErrorMessage = ChessMessage<ErrorPayload>;
 export type MoveMessage = ChessMessage<MovePayload>;

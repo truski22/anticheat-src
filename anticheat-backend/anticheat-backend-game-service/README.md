@@ -23,25 +23,23 @@ unpooled JDBC) to Spring Boot, following the same pattern already applied to
 
 ## Package structure
 
-Root package `com.chessfraud.gameservice`:
+Root package `com.chessfraud.gameservice`, organized **package by feature** (one feature,
+`game`, with layer subpackages underneath — not layer-first):
 
 ```
 com.chessfraud.gameservice/
   GameServiceApplication.java        @SpringBootApplication
-  model/
-    game/
+  game/
+    model/
       Game.java                     Spring Data JDBC entity, @Table("games"), auto-generated id
-  repository/
-    game/
+    repository/
       GameRepository.java           interface extends CrudRepository<Game, Integer>
-  service/
-    game/
+    service/
       GamePersistenceService.java   @Service, @Transactional
-  dto/
-    game/
+    dto/
       GamesResult.java / SaveGameResult.java   internal service results
-  grpc/
-    GameGrpcService.java            extends GameServiceGrpc.GameServiceImplBase, @GrpcService
+    grpc/
+      GameGrpcService.java          extends GameServiceGrpc.GameServiceImplBase, @GrpcService
 ```
 
 ## What's done
