@@ -2,7 +2,7 @@
 
 ## Overview
 
-The gateway bridges WebSocket connections to the internal MQTT bus. Clients authenticate via REST endpoints to obtain a JWT token, then connect via WebSocket at `/ws?token=JWT_TOKEN`. The username is extracted from the JWT — **not** included in the message envelope.
+The gateway bridges WebSocket connections directly to the internal gRPC services (`user-service`, `game-service`, `analysis-service`) — there is no message broker involved. Clients authenticate via REST endpoints to obtain a JWT token, then connect via WebSocket at `/ws?token=JWT_TOKEN`. The username is extracted from the JWT — **not** included in the message envelope.
 
 All messages use a typed envelope (`ChessMessage`) with a `type` discriminator, an optional `messageId` for request/response correlation, and a typed `payload`.
 
@@ -81,13 +81,13 @@ Each WebSocket session is rate-limited to **10 messages per second**. If exceede
 
 > **Note:** `LOGIN`, `REGISTER`, `SEND_EMAIL_CHANGE_PASSWORD`, and `CHANGE_PASSWORD_EMAIL` have been moved to REST endpoints (see [Authentication](#authentication) above). They are no longer accepted over WebSocket.
 
-| Type                        | Auth Required | Payload                             | MQTT Topic              | Description                        |
-|-----------------------------|---------------|--------------------------------------|-------------------------|------------------------------------|
-| `USER_INFO_REQUEST`         | Yes           | _(none)_                             | `user/info`             | Request user profile info          |
-| `GAMES_REQUEST`             | Yes           | _(none)_                             | `game/info`             | Request list of user's games       |
-| `ANALYZE_GAME`              | Yes           | `AnalyzeGamePayload`                 | `game/analyze`          | Submit game for fraud analysis     |
-| `SAVE_GAME`                 | Yes           | `SaveGamePayload`                    | `game/info`             | Save a completed game              |
-| `CHANGE_PASSWORD`           | Yes           | `ChangePasswordPayload`              | `user/password`         | Change password (authenticated)    |
+| Type                        | Auth Required | Payload                             | Backend Service          | Description                        |
+|-----------------------------|---------------|--------------------------------------|---------------------------|------------------------------------|
+| `USER_INFO_REQUEST`         | Yes           | _(none)_                             | `user-service` (gRPC)     | Request user profile info          |
+| `GAMES_REQUEST`             | Yes           | _(none)_                             | `game-service` (gRPC)     | Request list of user's games       |
+| `ANALYZE_GAME`              | Yes           | `AnalyzeGamePayload`                 | `analysis-service` (gRPC) | Submit game for fraud analysis     |
+| `SAVE_GAME`                 | Yes           | `SaveGamePayload`                    | `game-service` (gRPC)     | Save a completed game              |
+| `CHANGE_PASSWORD`           | Yes           | `ChangePasswordPayload`              | `user-service` (gRPC)     | Change password (authenticated)    |
 
 ### Gateway → Client
 
@@ -99,6 +99,7 @@ Each WebSocket session is rate-limited to **10 messages per second**. If exceede
 | `GAMES`                           | `GamesPayload`                         | List of user's games               |
 | `ANALYZE_RESULT`                  | `AnalyzeResultPayload`                 | Fraud analysis result              |
 | `SAVE_GAME_RESPONSE`              | `ResponsePayload`                      | Save game result                   |
+| `CHANGE_PASSWORD_RESPONSE`        | `ResponsePayload`                      | Change password result (authenticated) |
 | `CHANGE_PASSWORD_EMAIL_RESPONSE`  | `ChangePasswordEmailResponsePayload`   | Password reset code                |
 | `ERROR`                           | `ErrorPayload`                         | Error with code and message        |
 
@@ -426,15 +427,14 @@ The gateway uses `PayloadRegistry.deserialize()` to parse incoming messages. If 
 
 ---
 
-## MQTT Topic Mapping
+## Gateway → Backend Routing
 
-The gateway maps WebSocket messages to internal MQTT topics:
+The gateway routes WebSocket messages directly to internal gRPC services (no broker in between):
 
-| MQTT Topic       | Message Types Routed                                                                 |
-|------------------|--------------------------------------------------------------------------------------|
-| `user/info`      | `USER_INFO_REQUEST` → `USER_INFO`; Login/Register via REST → `LOGIN_RESPONSE`, `REGISTER_RESPONSE` |
-| `user/password`  | `CHANGE_PASSWORD`; Forgot/Reset password via REST                                    |
-| `game/info`      | `GAMES_REQUEST`, `SAVE_GAME` → `GAMES`, `SAVE_GAME_RESPONSE`                        |
-| `game/analyze`   | `ANALYZE_GAME` → `ANALYZE_RESULT`                                                   |
+| Backend Service              | Message Types Routed                                                                 |
+|-------------------------------|--------------------------------------------------------------------------------------|
+| `user-service` (gRPC)         | `USER_INFO_REQUEST` → `USER_INFO`; Login/Register via REST → `LOGIN_RESPONSE`, `REGISTER_RESPONSE`; `CHANGE_PASSWORD`; Forgot/Reset password via REST |
+| `game-service` (gRPC)         | `GAMES_REQUEST`, `SAVE_GAME` → `GAMES`, `SAVE_GAME_RESPONSE`                        |
+| `analysis-service` (gRPC)     | `ANALYZE_GAME` → `ANALYZE_RESULT`                                                   |
 
-The username is extracted from the JWT token during WebSocket handshake and injected into the MQTT message context — it is never part of the `ChessMessage` envelope.
+The username is extracted from the JWT token during WebSocket handshake and passed as a field on the outgoing gRPC request — it is never part of the `ChessMessage` envelope.

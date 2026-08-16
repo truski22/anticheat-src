@@ -112,8 +112,8 @@ graph LR
 | Layer | Technology | Purpose |
 |------|-----------|-----------|
 | **Frontend** | Angular 19, TypeScript, Chart.js, chess.js | Responsive SPA with a custom design system |
-| **Gateway** | Java 21, Tyrus WebSocket, JDK HttpServer | WS + REST entry point, rate limiter |
-| **Microservices** | Java 21, Maven, JDBC, BCrypt, Jackson | Business logic (user, game, analysis) |
+| **Gateway** | Java 21, Spring Boot, Spring WebSocket | WS + REST entry point, rate limiter |
+| **Microservices** | Java 21, Spring Boot, Maven, JDBC, BCrypt, Jackson | Business logic (user, game, analysis) |
 | **ML** | Python 3.11, FastAPI, scikit-learn, python-chess, Stockfish | Fraud detection pipeline |
 | **Communication** | gRPC (Protocol Buffers, HTTP/2) | RPC between services |
 | **Database** | PostgreSQL 16 Alpine | User and game persistence |
