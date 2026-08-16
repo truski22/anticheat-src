@@ -1,5 +1,5 @@
 # ──────────────────────────────────────────────
-# GATEWAY — gateway WebSocket expuesto al exterior
+# GATEWAY — WebSocket gateway exposed externally
 # ──────────────────────────────────────────────
 apiVersion: apps/v1
 kind: Deployment
@@ -16,23 +16,23 @@ spec:
       labels:
         app: gateway
     spec:
-      # initContainers: contenedores que se ejecutan y COMPLETAN antes de que
-      # arranque el contenedor principal. Son la forma de gestionar dependencias
-      # de arranque en Kubernetes (equivalente a depends_on en Docker Compose).
-      # Si un initContainer falla, Kubernetes lo reintenta hasta que tenga éxito.
+      # initContainers: containers that run and COMPLETE before the main
+      # container starts. They're how Kubernetes manages startup
+      # dependencies (equivalent to depends_on in Docker Compose).
+      # If an initContainer fails, Kubernetes retries it until it succeeds.
       initContainers:
         - name: wait-for-mosquitto
           image: busybox:1.36
-          # nc -z: intenta conectar al host:puerto sin enviar datos.
-          # El bucle espera hasta que el broker MQTT acepte conexiones.
+          # nc -z: tries to connect to host:port without sending data.
+          # The loop waits until the MQTT broker accepts connections.
           command:
             - sh
             - -c
             - |
               until nc -z mosquitto 1883; do
-                echo "Esperando a mosquitto..."; sleep 2
+                echo "Waiting for mosquitto..."; sleep 2
               done
-              echo "Mosquitto listo."
+              echo "Mosquitto ready."
 
       containers:
         - name: gateway
@@ -94,15 +94,15 @@ spec:
               memory: "512Mi"
 
 ---
-# Service tipo NodePort: expone el pod en un puerto del NODO (máquina física
-# o VM de Kubernetes). Permite acceso desde fuera del clúster.
-# Rango válido de NodePort: 30000–32767.
+# NodePort Service: exposes the pod on a port of the NODE (physical machine
+# or Kubernetes VM). Allows access from outside the cluster.
+# Valid NodePort range: 30000–32767.
 #
-# Flujo de una conexión entrante:
-#   Cliente → IP-del-nodo:30080 → Service → Pod:8080
+# Incoming connection flow:
+#   Client → node-IP:30080 → Service → Pod:8080
 #
-# En producción usarías LoadBalancer (provisionado por el cloud provider)
-# o un Ingress Controller para TLS y routing por dominio.
+# In production you'd use LoadBalancer (provisioned by the cloud provider)
+# or an Ingress Controller for TLS and domain-based routing.
 apiVersion: v1
 kind: Service
 metadata:
@@ -113,6 +113,6 @@ spec:
   selector:
     app: gateway
   ports:
-    - port: 8080          # puerto dentro del clúster
-      targetPort: 8080    # puerto del contenedor
-      nodePort: 30080     # puerto accesible desde fuera del clúster
+    - port: 8080          # port inside the cluster
+      targetPort: 8080    # container port
+      nodePort: 30080     # port accessible from outside the cluster

@@ -1,5 +1,5 @@
 # ──────────────────────────────────────────────
-# ML-SERVICE — servicio Python/Flask de análisis ML
+# ML-SERVICE — Python/Flask ML analysis service
 # ──────────────────────────────────────────────
 apiVersion: apps/v1
 kind: Deployment
@@ -19,16 +19,16 @@ spec:
       containers:
         - name: ml-service
           image: anticheat/ml-service:latest
-          # IfNotPresent: usa la imagen local si existe; no intenta descargarla.
-          # Necesario cuando trabajas con imágenes construidas localmente
-          # en Minikube o Kind sin registry externo.
+          # IfNotPresent: uses the local image if it exists; doesn't try to pull it.
+          # Needed when working with images built locally
+          # in Minikube or Kind without an external registry.
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 5002
 
           env:
-            # envFrom.configMapRef: inyecta TODAS las claves de un ConfigMap
-            # como variables de entorno. Más cómodo que declararlas una a una.
+            # envFrom.configMapRef: injects ALL keys from a ConfigMap
+            # as environment variables. More convenient than declaring them one by one.
             - name: STOCKFISH_PATH
               valueFrom:
                 configMapKeyRef:
@@ -40,9 +40,9 @@ spec:
                   name: anticheat-secret
                   key: AUTH_TOKEN
 
-          # HTTP probe: Kubernetes hace una petición GET al endpoint indicado.
-          # Si responde 2xx/3xx → listo. Si falla → pod no recibe tráfico (readiness)
-          # o se reinicia (liveness).
+          # HTTP probe: Kubernetes makes a GET request to the given endpoint.
+          # If it responds 2xx/3xx → ready. If it fails → pod gets no traffic (readiness)
+          # or gets restarted (liveness).
           readinessProbe:
             httpGet:
               path: /health

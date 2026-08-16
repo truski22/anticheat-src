@@ -1,5 +1,5 @@
-# ConfigMap: almacena configuración no sensible accesible por los pods como
-# variables de entorno o ficheros montados en volúmenes.
+# ConfigMap: stores non-sensitive configuration accessible by pods as
+# environment variables or files mounted in volumes.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -7,15 +7,15 @@ metadata:
   namespace: anticheat
 data:
   DB_HOST: "postgres"
-  # URL del servicio Python que consume analysis-service
+  # URL of the Python service consumed by analysis-service
   CHESS_INSIGHTS_URL: "http://ml-service:5002/eval"
-  # Ruta del binario de Stockfish dentro del contenedor ml-service
+  # Path to the Stockfish binary inside the ml-service container
   STOCKFISH_PATH: "/usr/games/stockfish"
   # MQTT broker URL used by all Java services (env var interpolation in mqtt.properties)
   MQTT_BROKER_URL: "tcp://mosquitto:1883"
 
 ---
-# Configuración de Mosquitto montada como fichero dentro del contenedor
+# Mosquitto configuration mounted as a file inside the container
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -27,8 +27,8 @@ data:
     allow_anonymous true
 
 ---
-# Script SQL ejecutado por PostgreSQL al primer arranque para crear
-# las tablas necesarias en la base de datos anticheat
+# SQL script executed by PostgreSQL on first startup to create
+# the tables needed in the anticheat database
 apiVersion: v1
 kind: ConfigMap
 metadata:

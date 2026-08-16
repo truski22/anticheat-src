@@ -1,10 +1,10 @@
 # ──────────────────────────────────────────────
-# MOSQUITTO — broker MQTT interno
+# MOSQUITTO — internal MQTT broker
 # ──────────────────────────────────────────────
 
-# Deployment: describe los pods sin estado (stateless).
-# Kubernetes se encarga de mantener el número de réplicas deseado
-# y de reiniciar el pod si falla.
+# Deployment: describes stateless pods.
+# Kubernetes takes care of maintaining the desired number of replicas
+# and restarting the pod if it fails.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -14,7 +14,7 @@ spec:
   replicas: 1
   selector:
     matchLabels:
-      app: mosquitto        # Kubernetes usa estas etiquetas para saber qué pods gestiona este Deployment
+      app: mosquitto        # Kubernetes uses these labels to know which pods this Deployment manages
   template:
     metadata:
       labels:
@@ -26,26 +26,26 @@ spec:
           ports:
             - containerPort: 1883
 
-          # readinessProbe: Kubernetes no envía tráfico al pod hasta que
-          # este probe tenga éxito. Evita que otros servicios conecten
-          # antes de que el broker esté listo.
+          # readinessProbe: Kubernetes doesn't send traffic to the pod until
+          # this probe succeeds. Prevents other services from connecting
+          # before the broker is ready.
           readinessProbe:
             tcpSocket:
               port: 1883
             initialDelaySeconds: 5
             periodSeconds: 10
 
-          # livenessProbe: si falla, Kubernetes reinicia el contenedor.
+          # livenessProbe: if it fails, Kubernetes restarts the container.
           livenessProbe:
             tcpSocket:
               port: 1883
             initialDelaySeconds: 15
             periodSeconds: 20
 
-          # resources: declara cuánta CPU y memoria necesita el contenedor.
-          # requests = mínimo garantizado para el scheduling.
-          # limits = máximo que puede consumir antes de ser throttled (CPU)
-          #          o eliminado (OOMKilled, memoria).
+          # resources: declares how much CPU and memory the container needs.
+          # requests = guaranteed minimum for scheduling.
+          # limits = maximum it can consume before being throttled (CPU)
+          #          or killed (OOMKilled, memory).
           resources:
             requests:
               cpu: "50m"
@@ -54,24 +54,24 @@ spec:
               cpu: "100m"
               memory: "64Mi"
 
-          # volumeMounts: puntos de montaje dentro del contenedor
+          # volumeMounts: mount points inside the container
           volumeMounts:
             - name: mosquitto-config
               mountPath: /mosquitto/config/mosquitto.conf
-              subPath: mosquitto.conf   # monta solo ese fichero, no el directorio entero
+              subPath: mosquitto.conf   # mounts only that file, not the whole directory
 
-      # volumes: declara los volúmenes disponibles para el pod.
-      # Aquí usamos un ConfigMap como fuente de un fichero de configuración.
+      # volumes: declares the volumes available to the pod.
+      # Here we use a ConfigMap as the source of a configuration file.
       volumes:
         - name: mosquitto-config
           configMap:
             name: mosquitto-config
 
 ---
-# Service: expone los pods internamente dentro del clúster.
-# ClusterIP (por defecto) asigna una IP virtual estable.
-# Cualquier pod puede conectarse a "mosquitto:1883" y Kubernetes
-# enruta la petición al pod correcto mediante kube-proxy.
+# Service: exposes the pods internally within the cluster.
+# ClusterIP (default) assigns a stable virtual IP.
+# Any pod can connect to "mosquitto:1883" and Kubernetes
+# routes the request to the right pod via kube-proxy.
 apiVersion: v1
 kind: Service
 metadata:
@@ -79,7 +79,7 @@ metadata:
   namespace: anticheat
 spec:
   selector:
-    app: mosquitto        # selecciona los pods con este label
+    app: mosquitto        # selects the pods with this label
   ports:
-    - port: 1883          # puerto del Service (lo que usan los clientes)
-      targetPort: 1883    # puerto del contenedor al que redirige
+    - port: 1883          # Service port (what clients use)
+      targetPort: 1883    # container port it redirects to

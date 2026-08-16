@@ -1,5 +1,5 @@
 # ──────────────────────────────────────────────
-# ANALYSIS-SERVICE — orquestador de análisis (MQTT + HTTP a ml-service)
+# ANALYSIS-SERVICE — analysis orchestrator (MQTT + HTTP to ml-service)
 # ──────────────────────────────────────────────
 apiVersion: apps/v1
 kind: Deployment
@@ -24,7 +24,7 @@ spec:
             - -c
             - |
               until nc -z mosquitto 1883; do
-                echo "Esperando a mosquitto..."; sleep 2
+                echo "Waiting for mosquitto..."; sleep 2
               done
         - name: wait-for-ml-service
           image: busybox:1.36
@@ -33,9 +33,9 @@ spec:
             - -c
             - |
               until nc -z ml-service 5002; do
-                echo "Esperando a ml-service..."; sleep 2
+                echo "Waiting for ml-service..."; sleep 2
               done
-              echo "ml-service listo."
+              echo "ml-service ready."
 
       containers:
         - name: analysis-service
