@@ -41,8 +41,8 @@ That's it. All services start via Docker Compose.
 
 | Service | Port | URL |
 |---------|------|-----|
-| Gateway (WebSocket) | 8080 | `ws://localhost:8080/ws?token=JWT` |
-| Gateway (REST Auth) | 8081 | `http://localhost:8081/auth/login` |
+| Gateway (WebSocket + REST Auth) | 8080 | `ws://localhost:8080/ws?token=JWT`, `http://localhost:8080/auth/login` |
+| Gateway (Actuator health) | 8081 | `http://localhost:8081/actuator/health` |
 | User Service (gRPC) | 9090 | — |
 | Game Service (gRPC) | 9092 | — |
 | Analysis Service (gRPC) | 9094 | — |
@@ -72,7 +72,6 @@ anticheat-backend/
 ├── anticheat-backend-ml-service/       # FastAPI + Stockfish + sklearn model
 ├── anticheat-backend-libs/
 │   ├── grpc-api/         # Protobuf definitions (.proto) and generated stubs
-│   ├── ws-lib/           # WebSocket server library (Tyrus)
 │   └── protocol/         # DTOs, protocol definitions, DB utility
 ├── anticheat-backend-infra/
 │   ├── docker/           # Database init scripts
@@ -86,6 +85,20 @@ anticheat-backend/
 ```
 
 Each service has its own `README.md` with inputs, outputs, and standalone run instructions.
+
+### Code organization: package by feature, then by type
+
+Java packages in every service are organized **by feature first**, not by technical layer:
+`user/`, `game/`, `analysis/`, `auth/`, `websocket/` each own everything that belongs to
+that feature, rather than a top-level `model/`/`repository/`/`service/`/`grpc/` split that
+scatters one feature's files across the whole codebase. **Within** a feature package, files
+are then grouped by type - `user/model/`, `user/repository/`, `user/service/`,
+`user/grpc/` - so a feature with several files of the same kind (multiple DTOs, multiple
+config classes) doesn't become a flat, unsorted folder. Only genuinely cross-cutting
+infrastructure (`config/`) sits outside any feature package. See
+`anticheat-backend-gateway/src/main/java/com/chessfraud/gateway/` (`auth/controller`,
+`auth/service`, `auth/dto`, `websocket/handler`, `websocket/interceptor`,
+`websocket/service`) for a service with more than one feature.
 
 ---
 
