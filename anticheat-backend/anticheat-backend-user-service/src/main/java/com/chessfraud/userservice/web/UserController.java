@@ -14,7 +14,7 @@ import com.chessfraud.userservice.dto.UserInfoResponse;
 import com.chessfraud.userservice.dto.user.LoginResult;
 import com.chessfraud.userservice.dto.user.RegisterResult;
 import com.chessfraud.userservice.dto.user.UserInfoResult;
-import com.chessfraud.userservice.service.EmailNotificationService;
+import main.java.com.chessfraud.userservice.service.email.EmailNotificationService;
 import com.chessfraud.userservice.service.user.UserAccountService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;

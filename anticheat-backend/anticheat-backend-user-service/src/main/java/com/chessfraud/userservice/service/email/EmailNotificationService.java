@@ -1,4 +1,4 @@
-package com.chessfraud.userservice.service;
+package com.chessfraud.userservice.service.email;
 
 import com.chessfraud.userservice.config.UserServiceConfig;
 import jakarta.mail.MessagingException;

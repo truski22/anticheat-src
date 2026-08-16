@@ -1,5 +1,6 @@
 package com.chessfraud.userservice.config;
 
+import com.chessfraud.userservice.service.email.EmailNotificationService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.mail.javamail.JavaMailSender;
@@ -8,7 +9,7 @@ import org.springframework.mail.javamail.JavaMailSenderImpl;
 import java.util.Properties;
 
 /**
- * Builds the {@link JavaMailSender} used by {@link com.chessfraud.userservice.service.EmailNotificationService}.
+ * Builds the {@link JavaMailSender} used by {@link EmailNotificationService}.
  * Gmail's SMTP relay with STARTTLS, same as the original hand-rolled Session/Transport setup.
  */
 @Configuration
