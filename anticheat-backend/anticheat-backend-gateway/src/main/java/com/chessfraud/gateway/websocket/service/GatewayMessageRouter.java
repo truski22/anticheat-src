@@ -58,15 +58,15 @@ public class GatewayMessageRouter {
     private ChessMessage handleMessage(ChessMessage message, String user) {
         return switch (message.type()) {
             case USER_INFO_REQUEST -> {
-                UserInfoResponse response = clients.userService().getUserInfo(
-                    UserInfoRequest.newBuilder().setUser(user).build());
+                UserInfoResponse response = clients.callUser(() -> clients.userService().getUserInfo(
+                    UserInfoRequest.newBuilder().setUser(user).build()));
                 UserInfoPayload payload = new UserInfoPayload(
                     response.getEmail(), response.getTotalGames(), response.getCheatGames(), response.getLegalGames());
                 yield new ChessMessage(MessageType.USER_INFO, payload);
             }
             case GAMES_REQUEST -> {
-                GetGamesResponse response = clients.gameService().getGames(
-                    GetGamesRequest.newBuilder().setUser(user).build());
+                GetGamesResponse response = clients.callGame(() -> clients.gameService().getGames(
+                    GetGamesRequest.newBuilder().setUser(user).build()));
                 List<GamesPayload.GameEntry> games = response.getGamesList().stream()
                     .map(game -> new GamesPayload.GameEntry(game.getMoves(), game.getLegal()))
                     .toList();
@@ -74,15 +74,15 @@ public class GatewayMessageRouter {
             }
             case CHANGE_PASSWORD -> {
                 ChangePasswordPayload payload = (ChangePasswordPayload) message.payload();
-                ChangePasswordResponse response = clients.userService().changePassword(
-                    ChangePasswordRequest.newBuilder().setUser(user).setPassword(payload.password()).build());
+                ChangePasswordResponse response = clients.callUser(() -> clients.userService().changePassword(
+                    ChangePasswordRequest.newBuilder().setUser(user).setPassword(payload.password()).build()));
                 yield new ChessMessage(MessageType.CHANGE_PASSWORD_RESPONSE,
                     new ResponsePayload(response.getSuccess(), response.getSuccess() ? "OK" : "KO"));
             }
             case ANALYZE_GAME -> {
                 AnalyzeGamePayload payload = (AnalyzeGamePayload) message.payload();
-                AnalyzeGameResponse response = clients.analysisService().analyzeGame(
-                    AnalyzeGameRequest.newBuilder().setUser(user).setMoves(payload.moves()).build());
+                AnalyzeGameResponse response = clients.callAnalysis(() -> clients.analysisService().analyzeGame(
+                    AnalyzeGameRequest.newBuilder().setUser(user).setMoves(payload.moves()).build()));
                 AnalyzeResultPayload resultPayload = new AnalyzeResultPayload(
                     response.getWhiteLegal(), response.getBlackLegal(),
                     response.getWhiteList(), response.getBlackList());
@@ -90,12 +90,12 @@ public class GatewayMessageRouter {
             }
             case SAVE_GAME -> {
                 SaveGamePayload payload = (SaveGamePayload) message.payload();
-                SaveGameResponse response = clients.gameService().saveGame(
+                SaveGameResponse response = clients.callGame(() -> clients.gameService().saveGame(
                     SaveGameRequest.newBuilder()
                         .setUser(user)
                         .setMoves(payload.moves())
                         .setLegal(payload.legal())
-                        .build());
+                        .build()));
                 yield new ChessMessage(MessageType.SAVE_GAME_RESPONSE,
                     new ResponsePayload(response.getSuccess(), response.getMessage()));
             }

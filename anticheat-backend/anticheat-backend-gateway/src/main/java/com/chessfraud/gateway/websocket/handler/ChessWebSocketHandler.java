@@ -14,6 +14,7 @@ import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -21,13 +22,16 @@ import java.util.concurrent.Executors;
 public class ChessWebSocketHandler extends TextWebSocketHandler {
     private static final Logger log = LoggerFactory.getLogger(ChessWebSocketHandler.class);
     public static final String USER_ATTR = "authenticatedUser";
+    private static final int MAX_MESSAGES_PER_SECOND = 10;
+    private static final Duration RATE_LIMIT_WINDOW = Duration.ofSeconds(1);
 
     private final GatewayMessageRouter router;
-    private final RateLimiter rateLimiter = new RateLimiter(10);
+    private final RateLimiter rateLimiter;
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
-    public ChessWebSocketHandler(GatewayMessageRouter router) {
+    public ChessWebSocketHandler(GatewayMessageRouter router, RateLimiter rateLimiter) {
         this.router = router;
+        this.rateLimiter = rateLimiter;
     }
 
     @Override
@@ -39,7 +43,7 @@ public class ChessWebSocketHandler extends TextWebSocketHandler {
     protected void handleTextMessage(WebSocketSession session, TextMessage message) {
         String user = user(session);
 
-        if (!rateLimiter.tryAcquire(user)) {
+        if (!rateLimiter.tryAcquire("ws:" + user, MAX_MESSAGES_PER_SECOND, RATE_LIMIT_WINDOW)) {
             log.error("[WS] Rate limit exceeded for {}", user);
             sendMessage(session, ChessMessage.error("RATE_LIMIT_EXCEEDED",
                 "Too many messages. Max 10 per second."));
@@ -60,7 +64,7 @@ public class ChessWebSocketHandler extends TextWebSocketHandler {
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
         String user = user(session);
         if (user != null) {
-            rateLimiter.removeSession(user);
+            rateLimiter.removeSession("ws:" + user);
             log.info("[WS] Connection closed: {}", user);
         }
     }

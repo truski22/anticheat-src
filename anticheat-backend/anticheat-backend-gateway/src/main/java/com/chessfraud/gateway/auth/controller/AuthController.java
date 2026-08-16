@@ -8,9 +8,11 @@ import com.chessfraud.gateway.auth.dto.LoginRequestBody;
 import com.chessfraud.gateway.auth.dto.RegisterRequestBody;
 import com.chessfraud.gateway.auth.dto.ResetPasswordRequestBody;
 import com.chessfraud.gateway.auth.exception.AuthenticationException;
+import com.chessfraud.gateway.auth.exception.RateLimitExceededException;
 import com.chessfraud.gateway.auth.service.JwtService;
 import com.chessfraud.gateway.auth.service.PasswordResetCodeStore;
 import com.chessfraud.gateway.grpc.ServiceClients;
+import com.chessfraud.gateway.ratelimit.RateLimiter;
 import com.chessfraud.grpc.user.ChangePasswordByEmailRequest;
 import com.chessfraud.grpc.user.ChangePasswordByEmailResponse;
 import com.chessfraud.grpc.user.ChangePasswordRequest;
@@ -23,6 +25,7 @@ import com.chessfraud.grpc.user.SendPasswordResetEmailRequest;
 import com.chessfraud.grpc.user.SendPasswordResetEmailResponse;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
+import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -34,6 +37,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.Duration;
 import java.util.regex.Pattern;
 
 @RestController
@@ -43,25 +47,33 @@ public class AuthController {
     private static final int MIN_PASSWORD_LENGTH = 8;
     private static final Pattern EMAIL_PATTERN = Pattern.compile(
         "^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$");
+    // Login/register have no prior authentication to key a limit on, so they're limited by
+    // source IP instead - without this they're wide open to brute-force/credential stuffing.
+    private static final int AUTH_ATTEMPT_LIMIT = 5;
+    private static final Duration AUTH_ATTEMPT_WINDOW = Duration.ofMinutes(1);
 
     private final ServiceClients clients;
     private final JwtService jwtService;
     private final PasswordResetCodeStore resetCodes;
+    private final RateLimiter rateLimiter;
 
-    public AuthController(ServiceClients clients, JwtService jwtService, PasswordResetCodeStore resetCodes) {
+    public AuthController(ServiceClients clients, JwtService jwtService, PasswordResetCodeStore resetCodes,
+                           RateLimiter rateLimiter) {
         this.clients = clients;
         this.jwtService = jwtService;
         this.resetCodes = resetCodes;
+        this.rateLimiter = rateLimiter;
     }
 
     @PostMapping("/login")
-    public ResponseEntity<AuthResponse> login(@RequestBody LoginRequestBody body) {
+    public ResponseEntity<AuthResponse> login(@RequestBody LoginRequestBody body, HttpServletRequest request) {
+        requireNotRateLimited("login:" + clientIp(request));
         String user = requireField(body.user(), "user");
         String password = requireField(body.password(), "password");
 
         try {
-            LoginResponse response = clients.userService().login(
-                LoginRequest.newBuilder().setUser(user).setPassword(password).build());
+            LoginResponse response = clients.callUser(() -> clients.userService().login(
+                LoginRequest.newBuilder().setUser(user).setPassword(password).build()));
 
             String token = response.getSuccess() ? jwtService.generateToken(user) : null;
             return ResponseEntity.status(response.getSuccess() ? 200 : 401)
@@ -72,7 +84,8 @@ public class AuthController {
     }
 
     @PostMapping("/register")
-    public ResponseEntity<AuthResponse> register(@RequestBody RegisterRequestBody body) {
+    public ResponseEntity<AuthResponse> register(@RequestBody RegisterRequestBody body, HttpServletRequest request) {
+        requireNotRateLimited("register:" + clientIp(request));
         String user = requireField(body.user(), "user");
         String email = requireField(body.email(), "email");
         String password = requireField(body.password(), "password");
@@ -80,8 +93,8 @@ public class AuthController {
         validatePassword(password);
 
         try {
-            RegisterResponse response = clients.userService().register(
-                RegisterRequest.newBuilder().setUser(user).setEmail(email).setPassword(password).build());
+            RegisterResponse response = clients.callUser(() -> clients.userService().register(
+                RegisterRequest.newBuilder().setUser(user).setEmail(email).setPassword(password).build()));
 
             String token = response.getSuccess() ? jwtService.generateToken(user) : null;
             return ResponseEntity.status(response.getSuccess() ? 201 : 409)
@@ -97,8 +110,8 @@ public class AuthController {
         validateEmail(email);
 
         try {
-            SendPasswordResetEmailResponse response = clients.userService().sendPasswordResetEmail(
-                SendPasswordResetEmailRequest.newBuilder().setEmail(email).build());
+            SendPasswordResetEmailResponse response = clients.callUser(() -> clients.userService().sendPasswordResetEmail(
+                SendPasswordResetEmailRequest.newBuilder().setEmail(email).build()));
             if (response.getSent()) {
                 resetCodes.store(email, response.getCode());
             }
@@ -123,8 +136,8 @@ public class AuthController {
         }
 
         try {
-            ChangePasswordByEmailResponse response = clients.userService().changePasswordByEmail(
-                ChangePasswordByEmailRequest.newBuilder().setEmail(email).setPassword(password).build());
+            ChangePasswordByEmailResponse response = clients.callUser(() -> clients.userService().changePasswordByEmail(
+                ChangePasswordByEmailRequest.newBuilder().setEmail(email).setPassword(password).build()));
 
             if (response.getSuccess()) {
                 return ResponseEntity.ok(new AuthResponse(true, "Password updated"));
@@ -151,8 +164,8 @@ public class AuthController {
         validatePassword(newPassword);
 
         try {
-            ChangePasswordResponse response = clients.userService().changePassword(
-                ChangePasswordRequest.newBuilder().setUser(authenticatedUser).setPassword(newPassword).build());
+            ChangePasswordResponse response = clients.callUser(() -> clients.userService().changePassword(
+                ChangePasswordRequest.newBuilder().setUser(authenticatedUser).setPassword(newPassword).build()));
 
             if (response.getSuccess()) {
                 return ResponseEntity.ok(new AuthResponse(true, "Password updated"));
@@ -184,6 +197,22 @@ public class AuthController {
         }
     }
 
+    /** Throws if the caller has exceeded {@link #AUTH_ATTEMPT_LIMIT} attempts within the window. */
+    private void requireNotRateLimited(String key) {
+        if (!rateLimiter.tryAcquire(key, AUTH_ATTEMPT_LIMIT, AUTH_ATTEMPT_WINDOW)) {
+            throw new RateLimitExceededException("Too many attempts, try again later");
+        }
+    }
+
+    /** Prefers X-Forwarded-For (gateway typically sits behind an ingress/load balancer). */
+    private String clientIp(HttpServletRequest request) {
+        String forwardedFor = request.getHeader("X-Forwarded-For");
+        if (forwardedFor != null && !forwardedFor.isBlank()) {
+            return forwardedFor.split(",")[0].trim();
+        }
+        return request.getRemoteAddr();
+    }
+
     private String requireField(String value, String field) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException("Missing required field: " + field);
@@ -211,6 +240,11 @@ public class AuthController {
     @ExceptionHandler(AuthenticationException.class)
     public ResponseEntity<AuthResponse> handleUnauthenticated(AuthenticationException e) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new AuthResponse(false, e.getMessage()));
+    }
+
+    @ExceptionHandler(RateLimitExceededException.class)
+    public ResponseEntity<AuthResponse> handleRateLimited(RateLimitExceededException e) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(new AuthResponse(false, e.getMessage()));
     }
 
     @ExceptionHandler(Exception.class)
