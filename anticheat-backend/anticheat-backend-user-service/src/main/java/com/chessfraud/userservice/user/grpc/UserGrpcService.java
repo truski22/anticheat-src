@@ -1,4 +1,4 @@
-package com.chessfraud.userservice.grpc;
+package com.chessfraud.userservice.user.grpc;
 
 import com.chessfraud.grpc.user.ChangePasswordByEmailRequest;
 import com.chessfraud.grpc.user.ChangePasswordByEmailResponse;
@@ -13,13 +13,13 @@ import com.chessfraud.grpc.user.SendPasswordResetEmailResponse;
 import com.chessfraud.grpc.user.UserInfoRequest;
 import com.chessfraud.grpc.user.UserInfoResponse;
 import com.chessfraud.grpc.user.UserServiceGrpc;
-import com.chessfraud.userservice.dto.user.LoginOutcome;
-import com.chessfraud.userservice.dto.user.LoginResult;
-import com.chessfraud.userservice.dto.user.RegisterOutcome;
-import com.chessfraud.userservice.dto.user.RegisterResult;
-import com.chessfraud.userservice.dto.user.UserInfoResult;
-import com.chessfraud.userservice.service.email.EmailNotificationService;
-import com.chessfraud.userservice.service.user.UserAccountService;
+import com.chessfraud.userservice.email.service.EmailNotificationService;
+import com.chessfraud.userservice.user.dto.LoginOutcome;
+import com.chessfraud.userservice.user.dto.LoginResult;
+import com.chessfraud.userservice.user.dto.RegisterOutcome;
+import com.chessfraud.userservice.user.dto.RegisterResult;
+import com.chessfraud.userservice.user.dto.UserInfoResult;
+import com.chessfraud.userservice.user.service.UserAccountService;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
 import net.devh.boot.grpc.server.service.GrpcService;
@@ -29,7 +29,7 @@ import java.security.SecureRandom;
 /**
  * Implements the contract from anticheat-backend-libs/grpc-api/user_service.proto
  * (same default host/port "user-service:9090" expected by
- * anticheat-backend-gateway/grpc/ServiceClients.java). Replaces the old
+ * anticheat-backend-gateway's ServiceClients). Replaces the old
  * {@code web/UserController.java} REST controller: same business routes,
  * gRPC transport instead of JSON over HTTP.
  */

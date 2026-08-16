@@ -1,6 +1,6 @@
-package com.chessfraud.userservice.repository.user;
+package com.chessfraud.userservice.user.repository;
 
-import com.chessfraud.userservice.model.user.User;
+import com.chessfraud.userservice.user.model.User;
 import org.springframework.data.repository.CrudRepository;
 
 import java.util.Optional;

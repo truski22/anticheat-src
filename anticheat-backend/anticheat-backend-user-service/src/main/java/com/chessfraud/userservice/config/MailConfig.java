@@ -1,6 +1,6 @@
 package com.chessfraud.userservice.config;
 
-import com.chessfraud.userservice.service.email.EmailNotificationService;
+import com.chessfraud.userservice.email.service.EmailNotificationService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.mail.javamail.JavaMailSender;

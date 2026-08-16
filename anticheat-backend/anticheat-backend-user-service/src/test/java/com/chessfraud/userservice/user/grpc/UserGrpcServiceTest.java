@@ -1,4 +1,4 @@
-package com.chessfraud.userservice.grpc;
+package com.chessfraud.userservice.user.grpc;
 
 import com.chessfraud.grpc.user.LoginRequest;
 import com.chessfraud.grpc.user.LoginResponse;
