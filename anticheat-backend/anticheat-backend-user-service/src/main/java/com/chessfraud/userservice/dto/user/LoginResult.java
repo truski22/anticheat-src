@@ -1,17 +1,17 @@
 package com.chessfraud.userservice.dto.user;
 
 public class LoginResult {
-    private final String response;
+    private final LoginOutcome outcome;
 
-    public LoginResult(String response) {
-        this.response = response;
+    public LoginResult(LoginOutcome outcome) {
+        this.outcome = outcome;
     }
 
     public boolean isSuccess() {
-        return "OK".equals(response);
+        return outcome == LoginOutcome.OK;
     }
 
-    public String getResponse() {
-        return response;
+    public LoginOutcome getOutcome() {
+        return outcome;
     }
 }

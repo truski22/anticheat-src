@@ -1,6 +1,8 @@
 package com.chessfraud.userservice.service.user;
 
+import com.chessfraud.userservice.dto.user.LoginOutcome;
 import com.chessfraud.userservice.dto.user.LoginResult;
+import com.chessfraud.userservice.dto.user.RegisterOutcome;
 import com.chessfraud.userservice.dto.user.RegisterResult;
 import com.chessfraud.userservice.dto.user.UserInfoResult;
 import com.chessfraud.userservice.model.user.User;
@@ -8,6 +10,7 @@ import com.chessfraud.userservice.repository.user.UserRepository;
 import org.mindrot.jbcrypt.BCrypt;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
 import java.util.Optional;
@@ -30,29 +33,42 @@ public class UserAccountService{
     public LoginResult login(String name, String password) {
         Optional<User> userOpt = userRepository.findByName(name);
         if (userOpt.isEmpty()) {
-            return new LoginResult("KO");
+            return new LoginResult(LoginOutcome.INVALID_CREDENTIALS);
         }
         User user = userOpt.get();
-        String response = BCrypt.checkpw(password, user.getPassword()) ? "OK" : "KO";
-        return new LoginResult(response);
+        LoginOutcome outcome = BCrypt.checkpw(password, user.getPassword())
+                ? LoginOutcome.OK
+                : LoginOutcome.INVALID_CREDENTIALS;
+        return new LoginResult(outcome);
     }
 
     public RegisterResult register(String name, String email, String password) {
-        boolean nameExists = userRepository.existsByName(name);
-        if (nameExists) {
-            return new RegisterResult("UNV");
+        if (userRepository.existsByName(name)) {
+            return new RegisterResult(RegisterOutcome.USERNAME_TAKEN);
         }
-        boolean emailExists = userRepository.existsByEmail(email);
-        if (emailExists) {
-            return new RegisterResult("ENV");
+        if (userRepository.existsByEmail(email)) {
+            return new RegisterResult(RegisterOutcome.EMAIL_TAKEN);
         }
+
         User user = new User();
         user.setName(name);
         user.setEmail(email);
-        String hashedPassword = BCrypt.hashpw(password, BCrypt.gensalt(12));
-        user.setPassword(hashedPassword);
-        userRepository.save(user);
-        return new RegisterResult("OK");
+        user.setPassword(BCrypt.hashpw(password, BCrypt.gensalt(12)));
+
+        try {
+            userRepository.save(user);
+        } catch (DataIntegrityViolationException raceLoser) {
+            log.warn("[USER-SERVICE] Concurrent registration detected for name='{}', email='{}'", name, email);
+            if (userRepository.existsByName(name)) {
+                return new RegisterResult(RegisterOutcome.USERNAME_TAKEN);
+            }
+            if (userRepository.existsByEmail(email)) {
+                return new RegisterResult(RegisterOutcome.EMAIL_TAKEN);
+            }
+            throw raceLoser;
+        }
+
+        return new RegisterResult(RegisterOutcome.OK);
     }
 
     public UserInfoResult getUserInfo(String name) {
