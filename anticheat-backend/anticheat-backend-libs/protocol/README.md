@@ -9,9 +9,9 @@ the catalog of message types, the typed payload for each one, and the `PayloadRe
 that (de)serializes between raw JSON and these types.
 
 This module has no dependency on any web/application framework - only Jackson and the
-SLF4J API - so it drops into a raw WebSocket handler (today) or a Spring MVC / Spring
-WebSocket component (after the planned migration, see the parent module's
-[ARCHITECTURE.md](../ARCHITECTURE.md)) without changes.
+SLF4J API - so it drops into a Spring MVC / `spring-boot-starter-websocket` component
+(see the parent module's [ARCHITECTURE.md](../ARCHITECTURE.md)) without changes. The
+gateway's `TextWebSocketHandler` is the only current consumer.
 
 ## Package layout
 

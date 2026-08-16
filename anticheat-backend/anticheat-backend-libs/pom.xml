@@ -12,15 +12,13 @@
     <description>
         Shared, framework-agnostic libraries consumed by the Chessfraud/anticheat backend
         services (gateway, user-service, game-service, analysis-service): the client/gateway
-        wire protocol, generated gRPC stubs, and (transitionally, until the gateway migrates
-        onto Spring Boot's own WebSocket support) a thin WebSocket server bootstrap.
+        wire protocol and generated gRPC stubs.
         See each module's README for details and ARCHITECTURE.md for the module boundaries
         and versioning policy.
     </description>
 
     <modules>
         <module>protocol</module>
-        <module>ws-lib</module>
         <module>grpc-api</module>
     </modules>
 
