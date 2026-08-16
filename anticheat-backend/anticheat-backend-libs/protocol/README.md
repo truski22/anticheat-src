@@ -1,50 +1,85 @@
-# Shared
+# protocol
 
-Common data models, utilities, and configuration used by all Java microservices.
+Framework-agnostic wire protocol between WebSocket clients and the gateway.
 
 ## Overview
 
-Contains the MQTT message DTOs, database utilities, JSON helpers, and per-service MQTT configuration files that form the shared contract across all services.
+Defines the `ChessMessage` envelope exchanged over the gateway's WebSocket connection,
+the catalog of message types, the typed payload for each one, and the `PayloadRegistry`
+that (de)serializes between raw JSON and these types.
 
-## Key Components
+This module has no dependency on any web/application framework - only Jackson and the
+SLF4J API - so it drops into a raw WebSocket handler (today) or a Spring MVC / Spring
+WebSocket component (after the planned migration, see the parent module's
+[ARCHITECTURE.md](../ARCHITECTURE.md)) without changes.
 
-### Message DTOs
+## Package layout
 
-| DTO | Used By |
-|-----|---------|
-| `LoginRequest` / `LoginResponse` | user-service, gateway |
-| `RegisterRequest` / `RegisterResponse` | user-service, gateway |
-| `UserInfoRequest` / `UserInfoResponse` | user-service, gateway |
-| `ChangePassword` / `ChangePasswordSendEmail` | user-service, gateway |
-| `GamesRequest` / `GamesResponse` | game-service, gateway |
-| `SaveGame` | game-service, gateway |
-| `AnalyzeGame` / `AnalyzeGameResponse` | analysis-service, gateway |
+| Package | Contents |
+|---|---|
+| `com.chessfraud.protocol` | `ChessMessage` envelope, `MessageType` enum, `PayloadRegistry` |
+| `com.chessfraud.protocol.payload` | One record per message payload (see catalog below) |
+| `com.chessfraud.protocol.exception` | `InvalidMessageException` |
 
-### Utilities
+## Message catalog
 
-| Class | Purpose |
-|-------|---------|
-| `Database` | MySQL connection factory |
-| `Utils` | JSON parsing helpers (Jackson) |
+| `MessageType` | Direction | Payload |
+|---|---|---|
+| `LOGIN` | Client → Gateway | `LoginPayload` |
+| `REGISTER` | Client → Gateway | `RegisterPayload` |
+| `USER_INFO_REQUEST` | Client → Gateway | *(none)* |
+| `GAMES_REQUEST` | Client → Gateway | *(none)* |
+| `ANALYZE_GAME` | Client → Gateway | `AnalyzeGamePayload` |
+| `SAVE_GAME` | Client → Gateway | `SaveGamePayload` |
+| `CHANGE_PASSWORD` | Client → Gateway | `ChangePasswordPayload` |
+| `CHANGE_PASSWORD_EMAIL` | Client → Gateway | `ChangePasswordEmailPayload` |
+| `SEND_EMAIL_CHANGE_PASSWORD` | Client → Gateway | `SendEmailChangePasswordPayload` |
+| `LOGIN_RESPONSE` / `REGISTER_RESPONSE` / `SAVE_GAME_RESPONSE` / `CHANGE_PASSWORD_RESPONSE` | Gateway → Client | `ResponsePayload` |
+| `USER_INFO` | Gateway → Client | `UserInfoPayload` |
+| `GAMES` | Gateway → Client | `GamesPayload` |
+| `ANALYZE_RESULT` | Gateway → Client | `AnalyzeResultPayload` |
+| `CHANGE_PASSWORD_EMAIL_RESPONSE` | Gateway → Client | `ChangePasswordEmailResponsePayload` |
+| `ERROR` | Gateway → Client | `ErrorPayload` |
+| `MOVE`, `RESIGN`, `CHAT`, `FRAUD_ALERT` | Reserved for future game types | `MovePayload` / `FraudAlertPayload` (others unregistered) |
 
-### Configuration
+Adding a new type requires a matching entry in `PayloadRegistry`'s static registry block
+unless the message intentionally carries no payload.
 
-MQTT `.properties` files for each service (broker URL, client ID, topics).
+## Security hardening
+
+`PayloadRegistry` is the trust boundary for every inbound WebSocket frame - untrusted
+client input is parsed here before any business logic sees it:
+
+- **Size cap** - `PayloadRegistry.MAX_MESSAGE_BYTES` (256 KiB) rejects oversized frames
+  with `MESSAGE_TOO_LARGE` before parsing starts.
+- **Parser constraints** - Jackson's `StreamReadConstraints` caps JSON nesting depth and
+  string length, preventing stack-overflow / allocation-based DoS from a single crafted
+  frame (deeply nested arrays, multi-megabyte strings).
+- **No polymorphic type handling** - the payload class for a message is resolved from a
+  fixed, compile-time `Map<MessageType, Class<?>>`, never from client-supplied type
+  information, so this module is not exposed to Jackson deserialization-gadget attacks.
+- **Fail-closed validation** - payload records validate their own invariants in compact
+  constructors (e.g. `LoginPayload` rejects a blank password), so a malformed payload
+  never reaches business logic as a half-populated object.
 
 ## Usage
 
-This is **not a standalone service**. Add it as a Maven dependency:
-
-```bash
-mvn -f shared/pom.xml install
-```
-
-Then reference it in your service's `pom.xml`:
+Not a standalone service - add as a Maven dependency:
 
 ```xml
 <dependency>
-    <groupId>com.tfm</groupId>
-    <artifactId>shared</artifactId>
+    <groupId>com.chessfraud</groupId>
+    <artifactId>protocol</artifactId>
     <version>1.0-SNAPSHOT</version>
 </dependency>
 ```
+
+```java
+ChessMessage message = PayloadRegistry.deserialize(rawJson); // throws InvalidMessageException
+String json = PayloadRegistry.serialize(ChessMessage.error("RATE_LIMIT_EXCEEDED", "Too many messages"));
+```
+
+This module intentionally depends on `slf4j-api` only (not `logback-classic`) at compile
+time - the consuming application chooses its own logging backend. `logback-classic` is a
+test-only dependency here, used solely to see log output while running this module's own
+tests.

@@ -3,9 +3,9 @@ package websocket;
 import auth.JwtService;
 import com.auth0.jwt.exceptions.JWTVerificationException;
 import logic.GatewayMessageRouter;
-import protocol.ChessMessage;
-import protocol.InvalidMessageException;
-import protocol.PayloadRegistry;
+import com.chessfraud.protocol.ChessMessage;
+import com.chessfraud.protocol.exception.InvalidMessageException;
+import com.chessfraud.protocol.PayloadRegistry;
 import ratelimit.RateLimiter;
 
 import javax.websocket.*;

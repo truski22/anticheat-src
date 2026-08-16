@@ -8,6 +8,15 @@
     <artifactId>chessfraud-libs</artifactId>
     <version>1.0-SNAPSHOT</version>
     <packaging>pom</packaging>
+    <name>Chessfraud Backend Libraries</name>
+    <description>
+        Shared, framework-agnostic libraries consumed by the Chessfraud/anticheat backend
+        services (gateway, user-service, game-service, analysis-service): the client/gateway
+        wire protocol, generated gRPC stubs, and (transitionally, until the gateway migrates
+        onto Spring Boot's own WebSocket support) a thin WebSocket server bootstrap.
+        See each module's README for details and ARCHITECTURE.md for the module boundaries
+        and versioning policy.
+    </description>
 
     <modules>
         <module>protocol</module>
@@ -19,5 +28,52 @@
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+        <!-- Dependency versions: pinned once here, referenced by artifactId only in
+             child modules via <dependencyManagement/> below. Keeps every module (and,
+             by extension, every consumer that inherits transitively) on identical,
+             known-good versions instead of drifting per module. -->
+        <jackson.version>2.15.0</jackson.version>
+        <slf4j.version>2.0.12</slf4j.version>
+        <logback.version>1.5.3</logback.version>
+        <junit.version>5.10.2</junit.version>
+        <surefire.version>3.2.3</surefire.version>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-databind</artifactId>
+                <version>${jackson.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.slf4j</groupId>
+                <artifactId>slf4j-api</artifactId>
+                <version>${slf4j.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>ch.qos.logback</groupId>
+                <artifactId>logback-classic</artifactId>
+                <version>${logback.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.junit.jupiter</groupId>
+                <artifactId>junit-jupiter</artifactId>
+                <version>${junit.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <version>${surefire.version}</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
 </project>
