@@ -18,6 +18,15 @@ services:
       retries: 10
       start_period: 15s
 
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
   ml-service:
     build:
       context: ./anticheat-backend-ml-service
@@ -78,7 +87,7 @@ services:
       - "9094:9092"
       - "9095:9093"
     environment:
-      CHESS_INSIGHTS_URL: http://ml-service:5002/eval
+      CHESS_INSIGHTS_URL: http://ml-service:5002/predict
       ML_SERVICE_TOKEN: ${ML_SERVICE_TOKEN}
       GRPC_PORT: "9092"
     depends_on:
@@ -103,10 +112,17 @@ services:
       GAME_SERVICE_GRPC_PORT: "9091"
       ANALYSIS_SERVICE_HOST: analysis-service
       ANALYSIS_SERVICE_GRPC_PORT: "9092"
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
     depends_on:
-      - user-service
-      - game-service
-      - analysis-service
+      user-service:
+        condition: service_started
+      game-service:
+        condition: service_started
+      analysis-service:
+        condition: service_started
+      redis:
+        condition: service_healthy
     restart: on-failure
 
 volumes:

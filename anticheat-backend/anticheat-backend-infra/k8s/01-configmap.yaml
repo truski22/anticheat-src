@@ -8,23 +8,13 @@ metadata:
 data:
   DB_HOST: "postgres"
   # URL of the Python service consumed by analysis-service
-  CHESS_INSIGHTS_URL: "http://ml-service:5002/eval"
+  CHESS_INSIGHTS_URL: "http://ml-service:5002/predict"
   # Path to the Stockfish binary inside the ml-service container
   STOCKFISH_PATH: "/usr/games/stockfish"
-  # MQTT broker URL used by all Java services (env var interpolation in mqtt.properties)
-  MQTT_BROKER_URL: "tcp://mosquitto:1883"
-
----
-# Mosquitto configuration mounted as a file inside the container
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: mosquitto-config
-  namespace: anticheat
-data:
-  mosquitto.conf: |
-    listener 1883
-    allow_anonymous true
+  # Shared Redis cache used by the gateway (rate limiting, password-reset codes).
+  # Must stay in sync across pods so it works with more than one gateway replica.
+  REDIS_HOST: "redis"
+  REDIS_PORT: "6379"
 
 ---
 # SQL script executed by PostgreSQL on first startup to create

@@ -19,3 +19,5 @@ CREATE TABLE IF NOT EXISTS games (
     moves    TEXT         NOT NULL,
     legal    BOOLEAN      NOT NULL
 );
+
+CREATE INDEX IF NOT EXISTS idx_games_username ON games(username);
